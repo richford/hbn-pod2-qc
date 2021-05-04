@@ -1,2 +1,7 @@
 .ipynb_checkpoints
 expert-username-assignments.csv
+fibr-ratings/fibr-gifs.json
+fibr-ratings/votes.csv
+fibr-ratings/users.csv
+fibr-ratings/user_seen_samples.csv
+fibr-ratings/sample_summary.csv

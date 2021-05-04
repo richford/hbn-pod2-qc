@@ -1,0 +1,20 @@
+version: "3"
+services:
+  firebase-dl:
+    build:
+      context: docker
+      dockerfile: Dockerfile-json-dl
+    image: hbn-pod2/firebase-dl
+    volumes:
+      - ./fibr-ratings:/output
+    ports:
+      - "9005:9005"
+    stdin_open: true
+    tty: true
+  firebase-csv:
+    build:
+      context: docker
+      dockerfile: Dockerfile-json-to-csv
+    image: hbn-pod2/firebase-csv
+    volumes:
+      - ./fibr-ratings:/output
