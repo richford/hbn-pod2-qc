@@ -1,0 +1,49 @@
+version: "3"
+services:
+  firebase-dl:
+    build:
+      context: docker/firebase-dl
+    image: hbn-pod2/firebase-dl
+    volumes:
+      - ./fibr-ratings:/output
+    ports:
+      - "127.0.0.1:9005:9005"
+    stdin_open: true
+    tty: true
+  firebase-csv:
+    build:
+      context: docker/firebase-csv
+    image: hbn-pod2/firebase-csv
+    volumes:
+      - ./fibr-ratings:/output
+  expert-qc:
+    build:
+      context: docker/expert-qc
+    image: hbn-pod2/expert-qc
+    volumes:
+      - ./expert-ratings:/input
+  xgb-ratings:
+    build:
+      context: docker/xgb-ratings
+    image: hbn-pod2/xgb-ratings
+    volumes:
+      - ./expert-ratings:/input/expert-ratings
+      - ./fibr-ratings:/input/fibr-ratings
+      - ./xgb-ratings:/output
+  deep-learning-gcp:
+    build:
+      context: docker/deep-learning-gcp
+    image: hbn-pod2/deep-learning-gcp
+    volumes:
+      - ${GOOGLE_APPLICATION_CREDENTIALS_DIR}:/home/google_application_credentials/
+    environment:
+      - PROJECT_ID=${PROJECT_ID}
+      - CLOUD_TPU_NAME=${CLOUD_TPU_NAME}
+      - BUCKET_NAME=${BUCKET_NAME}
+      - CLOUDSDK_CORE_ACCOUNT=${CLOUDSDK_CORE_ACCOUNT}
+      - GOOGLE_APPLICATION_CREDENTIALS_FILE=${GOOGLE_APPLICATION_CREDENTIALS_FILE}
+      - TPU_SERVICE_ACCOUNT=${TPU_SERVICE_ACCOUNT}
+    ports:
+      - "127.0.0.1:9005:9005"
+    stdin_open: true
+    tty: true
