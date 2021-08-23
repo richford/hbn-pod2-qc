@@ -1,3 +1,4 @@
+.DS_Store
 .ipynb_checkpoints
 expert-username-assignments.csv
 fibr-ratings/fibr-gifs.json
@@ -5,3 +6,16 @@ fibr-ratings/votes.csv
 fibr-ratings/users.csv
 fibr-ratings/user_seen_samples.csv
 fibr-ratings/sample_summary.csv
+
+xgb-ratings/xgb-model-dir/*_static_*.json
+xgb-ratings/xgb-model-dir/*_both_*.json
+xgb-ratings/xgb-model-dir/*_animated_*.json
+xgb-ratings/*_animated.pdf
+xgb-ratings/*_static.pdf
+xgb-ratings/*_both.pdf
+xgb-ratings/*_animated.[ct]sv
+xgb-ratings/*_static.[ct]sv
+xgb-ratings/*_both.[ct]sv
+
+tfrecs/
+**/__pycache__
