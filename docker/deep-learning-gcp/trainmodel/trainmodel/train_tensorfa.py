@@ -6,129 +6,8 @@ import os.path as op
 import tensorflow as tf
 
 
-MODEL_PATH = op.join(op.dirname(__file__), "brain-extraction-unet-128iso-model.h5")
-
-
-def unet_slice_model(
-    model_name,
-    model_path=MODEL_PATH,
-    layer_prefix="",
-    layer_postfix="",
-    input_shape=(128, 128, 128, 1),
-    l2_reg=0.001,
-    trainable=False,
-):
-    model = tf.keras.models.load_model(model_path, compile=False)
-    model._name = model_name
-    if trainable:
-        for layer in model.layers:
-            layer.kernel_regularizer = tf.keras.regularizers.l2(l2_reg)
-    else:
-        model.trainable = False
-
-    def new_name(name):
-        return "".join([layer_prefix, name, layer_postfix])
-
-    for layer in model.layers:
-        layer._name = new_name(layer.name)
-
-    layer_names = [layer.name for layer in model.layers]
-    use_layers = layer_names[1 : layer_names.index(new_name("activation_6")) + 1]
-
-    _input = tf.keras.Input(shape=input_shape, name=new_name("input"))
-    l = _input
-    for layer_name in use_layers:
-        l = model.get_layer(layer_name)(l)
-
-    return tf.keras.Model(_input, l)
-
-
-class SliceChannel(tf.keras.layers.Layer):
-    def __init__(self, name, channel):
-        super(SliceChannel, self).__init__(trainable=False, name=name)
-        self.channel = channel
-    
-    def call(self, inputs):
-        return inputs[:, :, :, :, self.channel]
-    
-    def get_config(self):
-        return {"name": self.name, "channel": self.channel}
-
-
-def create_unet_model_4channels(unet_model_path=MODEL_PATH):
-    _input = tf.keras.layers.Input(shape=(128, 128, 128, 4))
-
-    channel0 = SliceChannel(name=f"channel_0", channel=0)(_input)
-    channel1 = SliceChannel(name=f"channel_1", channel=1)(_input)
-    channel2 = SliceChannel(name=f"channel_2", channel=2)(_input)
-    channel3 = SliceChannel(name=f"channel_3", channel=3)(_input)
-
-    unet = unet_slice_model(model_path=unet_model_path, model_name="unet")
-
-    unet_models = [unet(_channel) for _channel in [
-        channel0, channel1, channel2, channel3
-    ]]
-
-    x = tf.keras.layers.concatenate(unet_models)
-    x = tf.keras.layers.MaxPool3D(pool_size=2)(x)
-    x = tf.keras.layers.Conv3D(filters=128, kernel_size=1)(x)
-    x = tf.keras.layers.GlobalAveragePooling3D()(x)
-    x = tf.keras.layers.Dense(units=256, activation="relu")(x)
-    x = tf.keras.layers.Dropout(0.3)(x)
-
-    outputs = tf.keras.layers.Dense(units=1, activation="sigmoid")(x)
-    model = tf.keras.Model(_input, outputs, name="unet_4channel")
-    return model
-
-
-def create_unet_model_3channels(unet_model_path=MODEL_PATH):
-    _input = tf.keras.layers.Input(shape=(128, 128, 128, 3))
-
-    channel0 = SliceChannel(name=f"channel_0", channel=0)(_input)
-    channel1 = SliceChannel(name=f"channel_1", channel=1)(_input)
-    channel2 = SliceChannel(name=f"channel_2", channel=2)(_input)
-
-    unet = unet_slice_model(model_path=unet_model_path, model_name="unet")
-
-    unet_models = [unet(_channel) for _channel in [
-        channel0, channel1, channel2
-    ]]
-
-    x = tf.keras.layers.concatenate(unet_models)
-    x = tf.keras.layers.MaxPool3D(pool_size=2)(x)
-    x = tf.keras.layers.Conv3D(filters=128, kernel_size=1)(x)
-    x = tf.keras.layers.GlobalAveragePooling3D()(x)
-    x = tf.keras.layers.Dense(units=256, activation="relu")(x)
-    x = tf.keras.layers.Dropout(0.3)(x)
-
-    outputs = tf.keras.layers.Dense(units=1, activation="sigmoid")(x)
-    model = tf.keras.Model(_input, outputs, name="unet_3channel")
-    return model
-
-
-def create_unet_model(unet_model_path=MODEL_PATH, n_channels=3):
-    _input = tf.keras.layers.Input(shape=(128, 128, 128, n_channels))
-    unet = unet_slice_model(model_path=unet_model_path, model_name="unet")
-
-    unet_models = []
-    for channel in range(n_channels):
-        _channel = SliceChannel(name=f"channel_{channel}", channel=channel)(_input)
-        unet_models.append(unet(_channel))
-
-    x = tf.keras.layers.concatenate(unet_models)
-    x = tf.keras.layers.MaxPool3D(pool_size=2)(x)
-    x = tf.keras.layers.Conv3D(filters=128, kernel_size=1)(x)
-    x = tf.keras.layers.GlobalAveragePooling3D()(x)
-    x = tf.keras.layers.Dense(units=256, activation="relu")(x)
-    x = tf.keras.layers.Dropout(0.3)(x)
-
-    outputs = tf.keras.layers.Dense(units=1, activation="sigmoid")(x)
-    model = tf.keras.Model(_input, outputs, name=f"unet_{n_channels}channel")
-    return model
-
-
 def build_multi_input_model(
-    width=128, height=128, depth=128, n_image_channels=3, n_qc_metrics=30
+    width=128, height=128, depth=128, n_image_channels=3, n_qc_metrics=31
 ):
     """Build a multi-input model that concatenates a 3D convolutional neural
     network model and a dense model for QC inputs.
@@ -173,18 +52,19 @@ def build_model(width=128, height=128, depth=128, n_channels=3, include_top=True
 
     inputs = tf.keras.Input((width, height, depth, n_channels))
 
-    x = tf.keras.layers.Conv3D(filters=64, kernel_size=3, activation="relu")(inputs)
-    x = tf.keras.layers.Conv3D(filters=64, kernel_size=3, activation="relu")(x)
+    x = tf.keras.layers.Conv3D(filters=64, kernel_size=3, padding="same", activation="relu")(inputs)
     x = tf.keras.layers.MaxPool3D(pool_size=2)(x)
     x = tf.keras.layers.BatchNormalization()(x)
 
-    x = tf.keras.layers.Conv3D(filters=128, kernel_size=3, activation="relu")(x)
-    x = tf.keras.layers.Conv3D(filters=128, kernel_size=3, activation="relu")(x)
+    x = tf.keras.layers.Conv3D(filters=64, kernel_size=3, padding="same", activation="relu")(x)
     x = tf.keras.layers.MaxPool3D(pool_size=2)(x)
     x = tf.keras.layers.BatchNormalization()(x)
 
-    x = tf.keras.layers.Conv3D(filters=256, kernel_size=3, activation="relu")(x)
-    x = tf.keras.layers.Conv3D(filters=256, kernel_size=3, activation="relu")(x)
+    x = tf.keras.layers.Conv3D(filters=128, kernel_size=3, padding="same", activation="relu")(x)
+    x = tf.keras.layers.MaxPool3D(pool_size=2)(x)
+    x = tf.keras.layers.BatchNormalization()(x)
+
+    x = tf.keras.layers.Conv3D(filters=256, kernel_size=3, padding="same", activation="relu")(x)
     x = tf.keras.layers.MaxPool3D(pool_size=2)(x)
     x = tf.keras.layers.BatchNormalization()(x)
 
@@ -217,6 +97,9 @@ def main(
     model_loss="binary_crossentropy",
     compute_volume_numbers=False,
 ):
+    print("Setting gpu thread mode to gpu_private.")
+    os.environ["TF_GPU_THREAD_MODE"] = "gpu_private"
+
     print("Configuring distribution strategy")
     use_tpu = False
 
@@ -246,7 +129,7 @@ def main(
         )
 
     # Setting location were training logs and checkpoints will be stored
-    GCS_BASE_PATH = f"gs://{gcs_bucket}/{job_name}"
+    GCS_BASE_PATH = f"gs://{gcs_bucket}/{job_name}/seed_{dataset_seed}"
     TENSORBOARD_LOGS_DIR = op.join(GCS_BASE_PATH, "logs")
     MODEL_CHECKPOINT_DIR = op.join(GCS_BASE_PATH, "checkpoints")
     CSV_LOGGER_FILEPATH = op.join(
@@ -284,7 +167,7 @@ def main(
     batch_size = 16
     volume_shape = (128, 128, 128, n_channels)
     block_shape = (128, 128, 128, n_channels)
-    num_parallel_calls = 2
+    num_parallel_calls = 8
 
     dataset_train = nobrainer.dataset.get_dataset(
         file_pattern=op.join(device_dataset_dir, "data-train_shard*.tfrec"),
@@ -366,11 +249,16 @@ def main(
     with scope:
         # Set learning rate schedule
         initial_learning_rate = 0.0001
-        lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
-            initial_learning_rate, decay_steps=1000, decay_rate=0.9, staircase=True
-        )
 
-        optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
+        # lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+        #     initial_learning_rate,
+        #     decay_steps=steps_per_epoch * 2,
+        #     decay_rate=0.94,
+        #     staircase=True,
+        # )
+        # optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
+
+        optimizer = tf.keras.optimizers.Adam(learning_rate=initial_learning_rate)
 
         if model_loss == "mean_squared_error":
             # Define binary accuracy and AUC metrics when y_true is a probability
@@ -380,12 +268,14 @@ def main(
                 m.update_state(y_true, y_pred)
                 return m.result().numpy()
 
-            if n_channels == 3:
-                model = create_unet_model_3channels()
-            elif n_channels == 4:
-                model = create_unet_model_4channels()
-            else:
-                model = create_unet_model(n_channels=n_channels)
+            # if n_channels == 3:
+            #     model = create_unet_model_3channels()
+            # elif n_channels == 4:
+            #     model = create_unet_model_4channels()
+            # else:
+            #     model = create_unet_model(n_channels=n_channels)
+            
+            model = build_multi_input_model(n_image_channels=n_channels - 1)
 
             model.compile(
                 loss=model_loss,
@@ -408,12 +298,14 @@ def main(
                 label_y, num_parallel_calls=num_parallel_calls
             )
 
-            if n_channels == 3:
-                model = create_unet_model_3channels()
-            elif n_channels == 4:
-                model = create_unet_model_4channels()
-            else:
-                model = create_unet_model(n_channels=n_channels)
+            # if n_channels == 3:
+            #     model = create_unet_model_3channels()
+            # elif n_channels == 4:
+            #     model = create_unet_model_4channels()
+            # else:
+            #     model = create_unet_model(n_channels=n_channels)
+
+            model = build_multi_input_model(n_image_channels=n_channels - 1)
 
             model.compile(
                 loss=model_loss,
@@ -421,7 +313,7 @@ def main(
                 metrics=[
                     model_loss,
                     "accuracy",
-                    tf.keras.metrics.AUC(),
+                    "AUC",
                 ],
                 **compile_kwargs,
                 # run_eagerly=True,
@@ -444,16 +336,23 @@ def main(
         mode="auto",
     )
 
+    tensorboard = tf.keras.callbacks.TensorBoard(log_dir=TENSORBOARD_LOGS_DIR)
+
+    early_stop = tf.keras.callbacks.EarlyStopping(
+        monitor="val_loss", min_delta=0.001, patience=20,
+    )
+
+    reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(
+        monitor='val_loss', factor=0.5, patience=2, verbose=1,
+    )
+
     # Configure Tensorboard logs
     callbacks = [
-        tf.keras.callbacks.TensorBoard(log_dir=TENSORBOARD_LOGS_DIR),
+        tensorboard,
         best_model,
         csv_logger,
-        tf.keras.callbacks.EarlyStopping(
-            monitor="loss",
-            min_delta=0.001,
-            patience=15,
-        ),
+        early_stop,
+        reduce_lr,
     ]
 
     print("Training the model.")

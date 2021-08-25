@@ -17,23 +17,25 @@ echo Using google account $(gcloud config get-value account)
 echo Using project $(gcloud config get-value project)
 echo Using TPU service accounts ${SVC_ACCOUNT} and ${TPU_SERVICE_ACCOUNT}
 
-gcloud ai-platform jobs submit training ${JOB_NAME} \
-    --staging-bucket=gs://${BUCKET_NAME} \
-    --package-path=trainmodel \
-    --module-name=trainmodel.train_tensorfa \
-    --runtime-version=2.4 \
-    --python-version=3.7 \
-    --config=../config.yaml \
-    --region=us-central1 \
-    --project ${PROJECT_ID} \
-    -- \
-    --gcs_bucket=${BUCKET_NAME} \
-    --job_name=${JOB_NAME} \
-    --n_epochs=10 \
-    --n_channels=4 \
-    --dataset_name=b0-colorfa-4channel \
-    --dataset_seed=0 \
-    --model_loss=binary_crossentropy \
-    --no-compute-volume-numbers \
+for seed in {0..9}; do
+    gcloud ai-platform jobs submit training ${JOB_NAME}_seed${seed} \
+        --staging-bucket=gs://${BUCKET_NAME} \
+        --package-path=trainmodel \
+        --module-name=trainmodel.train_tensorfa \
+        --runtime-version=2.4 \
+        --python-version=3.7 \
+        --config=../config.yaml \
+        --region=us-central1 \
+        --project ${PROJECT_ID} \
+        -- \
+        --gcs_bucket=${BUCKET_NAME} \
+        --job_name=${JOB_NAME} \
+        --n_epochs=100 \
+        --n_channels=5 \
+        --dataset_name=b0-tensorfa-dwiqc \
+        --dataset_seed=${seed} \
+        --model_loss=binary_crossentropy \
+        --no-compute-volume-numbers
+done
 
 gcloud ai-platform jobs describe ${JOB_NAME}
