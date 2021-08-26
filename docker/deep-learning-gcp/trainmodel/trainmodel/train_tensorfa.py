@@ -268,13 +268,6 @@ def main(
                 m.update_state(y_true, y_pred)
                 return m.result().numpy()
 
-            # if n_channels == 3:
-            #     model = create_unet_model_3channels()
-            # elif n_channels == 4:
-            #     model = create_unet_model_4channels()
-            # else:
-            #     model = create_unet_model(n_channels=n_channels)
-            
             model = build_multi_input_model(n_image_channels=n_channels - 1)
 
             model.compile(
@@ -297,13 +290,6 @@ def main(
             dataset_test = dataset_test.map(
                 label_y, num_parallel_calls=num_parallel_calls
             )
-
-            # if n_channels == 3:
-            #     model = create_unet_model_3channels()
-            # elif n_channels == 4:
-            #     model = create_unet_model_4channels()
-            # else:
-            #     model = create_unet_model(n_channels=n_channels)
 
             model = build_multi_input_model(n_image_channels=n_channels - 1)
 
