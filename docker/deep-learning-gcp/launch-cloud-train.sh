@@ -18,7 +18,7 @@ echo Using project $(gcloud config get-value project)
 echo Using TPU service accounts ${SVC_ACCOUNT} and ${TPU_SERVICE_ACCOUNT}
 
 MIN_SEED=0
-MAX_SEED=5
+MAX_SEED=9
 for seed in $(seq ${MIN_SEED} ${MAX_SEED}); do
     gcloud ai-platform jobs submit training ${JOB_NAME}_seed${seed} \
         --staging-bucket=gs://${BUCKET_NAME} \
