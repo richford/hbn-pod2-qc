@@ -12,10 +12,5 @@ setup(
         'numpy',
         'tensorflow',
     ],
-    package_data={
-        'trainmodel': ['trainmodel/brain-extraction-unet-128iso-model.h5'],
-    },
-    data_files=[('saved_models', ['trainmodel/brain-extraction-unet-128iso-model.h5'])],
-    include_package_data=True,
     packages=find_packages()
 )

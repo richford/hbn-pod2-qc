@@ -17,7 +17,9 @@ echo Using google account $(gcloud config get-value account)
 echo Using project $(gcloud config get-value project)
 echo Using TPU service accounts ${SVC_ACCOUNT} and ${TPU_SERVICE_ACCOUNT}
 
-for seed in {0..9}; do
+MIN_SEED=0
+MAX_SEED=5
+for seed in $(seq ${MIN_SEED} ${MAX_SEED}); do
     gcloud ai-platform jobs submit training ${JOB_NAME}_seed${seed} \
         --staging-bucket=gs://${BUCKET_NAME} \
         --package-path=trainmodel \
@@ -38,4 +40,6 @@ for seed in {0..9}; do
         --no-compute-volume-numbers
 done
 
-gcloud ai-platform jobs describe ${JOB_NAME}
+for seed in $(seq ${MIN_SEED} ${MAX_SEED}); do
+    gcloud ai-platform jobs describe ${JOB_NAME}_seed${seed}
+done
