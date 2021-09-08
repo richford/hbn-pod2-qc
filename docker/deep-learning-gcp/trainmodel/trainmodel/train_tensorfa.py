@@ -7,7 +7,7 @@ import tensorflow as tf
 
 
 def build_multi_input_model(
-    width=128, height=128, depth=128, n_image_channels=3, n_qc_metrics=31
+    width=128, height=128, depth=128, n_image_channels=3, n_qc_metrics=31, neglect_qc=False
 ):
     """Build a multi-input model that concatenates a 3D convolutional neural
     network model and a dense model for QC inputs.
@@ -32,6 +32,10 @@ def build_multi_input_model(
     )(image_input)
 
     x = tf.keras.layers.Flatten()(qc_metric_input)
+
+    if neglect_qc:
+        x = tf.zeros_like(x)
+
     x = tf.keras.layers.concatenate([conv_net, x])
     x = tf.keras.layers.BatchNormalization()(x)
 
@@ -96,6 +100,7 @@ def main(
     dataset_seed=0,
     model_loss="binary_crossentropy",
     compute_volume_numbers=False,
+    neglect_qc=False,
 ):
     print("Setting gpu thread mode to gpu_private.")
     os.environ["TF_GPU_THREAD_MODE"] = "gpu_private"
@@ -268,7 +273,7 @@ def main(
                 m.update_state(y_true, y_pred)
                 return m.result().numpy()
 
-            model = build_multi_input_model(n_image_channels=n_channels - 1)
+            model = build_multi_input_model(n_image_channels=n_channels - 1, neglect_qc=neglect_qc)
 
             model.compile(
                 loss=model_loss,
@@ -291,7 +296,7 @@ def main(
                 label_y, num_parallel_calls=num_parallel_calls
             )
 
-            model = build_multi_input_model(n_image_channels=n_channels - 1)
+            model = build_multi_input_model(n_image_channels=n_channels - 1, neglect_qc=neglect_qc)
 
             model.compile(
                 loss=model_loss,
@@ -417,6 +422,11 @@ if __name__ == "__main__":
         dest="compute_volume_numbers",
         action="store_false",
     )
+    parser.add_argument(
+        "--neglect-qc",
+        dest="neglect_qc",
+        action="store_true",
+    )
     parser.set_defaults(compute_volume_numbers=False)
 
     args = parser.parse_args()
@@ -430,4 +440,5 @@ if __name__ == "__main__":
         dataset_seed=args.dataset_seed,
         model_loss=args.model_loss,
         compute_volume_numbers=args.compute_volume_numbers,
+        neglect_qc=args.neglect_qc,
     )
