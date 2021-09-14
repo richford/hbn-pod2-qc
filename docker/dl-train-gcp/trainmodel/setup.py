@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='trainmodel',
-    description='Train a tensorflow model on cloud TPU.',
+    description='Train a tensorflow model on GCP.',
     author="Adam Richie-Halford",
     author_email="richiehalford@gmail.com",
     install_requires=[

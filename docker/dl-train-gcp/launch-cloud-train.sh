@@ -18,7 +18,7 @@ echo Using project $(gcloud config get-value project)
 echo Using TPU service accounts ${SVC_ACCOUNT} and ${TPU_SERVICE_ACCOUNT}
 
 MIN_SEED=0
-MAX_SEED=5
+MAX_SEED=9
 for seed in $(seq ${MIN_SEED} ${MAX_SEED}); do
     gcloud ai-platform jobs submit training ${JOB_NAME}_seed${seed} \
         --staging-bucket=gs://${BUCKET_NAME} \
@@ -37,8 +37,7 @@ for seed in $(seq ${MIN_SEED} ${MAX_SEED}); do
         --dataset_name=b0-tensorfa-dwiqc \
         --dataset_seed=${seed} \
         --model_loss=binary_crossentropy \
-        --no-compute-volume-numbers \
-        --neglect-qc
+        --no-compute-volume-numbers
 done
 
 for seed in $(seq ${MIN_SEED} ${MAX_SEED}); do
