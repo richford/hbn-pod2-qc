@@ -9,4 +9,4 @@ RUN chmod +x /usr/local/bin/expert_qc.py
 ENV OUTDATED_IGNORE 1
 
 ENTRYPOINT ["expert_qc.py"]
-CMD ["/input"]
+CMD ["/input", "/derived-data", "/figures"]

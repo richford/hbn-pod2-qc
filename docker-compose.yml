@@ -1,35 +1,29 @@
 version: "3"
 services:
-  firebase-dl:
+  osf-download:
     build:
-      context: docker/firebase-dl
-    image: hbn-pod2/firebase-dl
+      context: docker/osf-download
+    image: hbn-pod2/osf-download
     volumes:
-      - ./fibr-ratings:/output
-    ports:
-      - "127.0.0.1:9005:9005"
-    stdin_open: true
-    tty: true
-  firebase-csv:
-    build:
-      context: docker/firebase-csv
-    image: hbn-pod2/firebase-csv
-    volumes:
-      - ./fibr-ratings:/output
+      - ./data/:/home/8cy32/
   expert-qc:
     build:
       context: docker/expert-qc
     image: hbn-pod2/expert-qc
     volumes:
-      - ./expert-ratings:/input
+      - ./data/osfstorage/expert-qc:/input
+      - ./data/derived/expert-qc:/derived-data
+      - ./figures/expert-qc:/figures
   xgb-ratings:
     build:
       context: docker/xgb-ratings
     image: hbn-pod2/xgb-ratings
     volumes:
-      - ./expert-ratings:/input/expert-ratings
-      - ./fibr-ratings:/input/fibr-ratings
-      - ./xgb-ratings:/output
+      - ./data/derived/expert-qc:/input/expert-ratings
+      - ./data/osfstorage/community-qc:/input/fibr-ratings
+      - ./data/osfstorage/expert-qc:/input/raw-expert-qc
+      - ./data/derived/community-qc:/output
+      - ./figures/community-qc:/figures
   dl-train-gcp:
     build:
       context: docker/dl-train-gcp
@@ -38,7 +32,6 @@ services:
       - ${GOOGLE_APPLICATION_CREDENTIALS_DIR}:/home/google_application_credentials/
     environment:
       - PROJECT_ID=${PROJECT_ID}
-      - CLOUD_TPU_NAME=${CLOUD_TPU_NAME}
       - BUCKET_NAME=${BUCKET_NAME}
       - CLOUDSDK_CORE_ACCOUNT=${CLOUDSDK_CORE_ACCOUNT}
       - GOOGLE_APPLICATION_CREDENTIALS_FILE=${GOOGLE_APPLICATION_CREDENTIALS_FILE}
@@ -55,7 +48,6 @@ services:
       - ${GOOGLE_APPLICATION_CREDENTIALS_DIR}:/home/google_application_credentials/
     environment:
       - PROJECT_ID=${PROJECT_ID}
-      - CLOUD_TPU_NAME=${CLOUD_TPU_NAME}
       - BUCKET_NAME=${BUCKET_NAME}
       - CLOUDSDK_CORE_ACCOUNT=${CLOUDSDK_CORE_ACCOUNT}
       - GOOGLE_APPLICATION_CREDENTIALS_FILE=${GOOGLE_APPLICATION_CREDENTIALS_FILE}
@@ -64,3 +56,28 @@ services:
       - "127.0.0.1:9005:9005"
     stdin_open: true
     tty: true
+  dl-integrated-gradients-gcp:
+    build:
+      context: docker/dl-integrated-gradients-gcp
+    image: hbn-pod2/dl-integrated-gradients-gcp
+    volumes:
+      - ${GOOGLE_APPLICATION_CREDENTIALS_DIR}:/home/google_application_credentials/
+    environment:
+      - PROJECT_ID=${PROJECT_ID}
+      - BUCKET_NAME=${BUCKET_NAME}
+      - CLOUDSDK_CORE_ACCOUNT=${CLOUDSDK_CORE_ACCOUNT}
+      - GOOGLE_APPLICATION_CREDENTIALS_FILE=${GOOGLE_APPLICATION_CREDENTIALS_FILE}
+      - TPU_SERVICE_ACCOUNT=${TPU_SERVICE_ACCOUNT}
+    ports:
+      - "127.0.0.1:9005:9005"
+    stdin_open: true
+    tty: true
+  dl-figures:
+    build:
+      context: docker/dl-figures
+    image: hbn-pod2/dl-figures
+    volumes:
+      - ./data/osfstorage/deep-learning-qc/saved-models/report-model:/input/saved-model
+      - ./data/osfstorage/deep-learning-qc/training-logs:/input/training-logs
+      - ./data/osfstorage/deep-learning-qc/report-set-predictions:/input/report-set-predictions
+      - ./figures/deep-learning-qc:/figures

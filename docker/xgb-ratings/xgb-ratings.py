@@ -1,19 +1,24 @@
 #!/opt/conda/bin/python
 
 import argparse
+import dask.dataframe as dd
 import json
 import matplotlib.pyplot as plt
 import numpy as np
 import os
 import os.path as op
 import pandas as pd
+import pingouin as pg
 import re
 import s3fs
+import seaborn as sns
 import shap
 
+from glob import glob
 from sklearn.ensemble import VotingClassifier
 from sklearn.metrics import auc
-from sklearn.metrics import plot_roc_curve, roc_curve, roc_auc_score
+from sklearn.metrics import roc_curve, roc_auc_score
+from sklearn.metrics import cohen_kappa_score
 from sklearn.model_selection import RepeatedStratifiedKFold
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
 from skopt import BayesSearchCV
@@ -80,16 +85,21 @@ def _get_Xy(expert_rating_file, fibr_dir, image_type=None):
 
     if image_type is not None:
         df_valid_votes["image_type"] = [
-            "animated" if not s.endswith("_5") else "static" for s in df_valid_votes["sample"]
+            "animated" if not s.endswith("_5") else "static"
+            for s in df_valid_votes["sample"]
         ]
-        
+
         if image_type in ["animated", "static"]:
             df_valid_votes = df_valid_votes[df_valid_votes["image_type"] == image_type]
         elif image_type == "both":
-            df_valid_votes["user"] = df_valid_votes["user"] + "_" + df_valid_votes["image_type"]
+            df_valid_votes["user"] = (
+                df_valid_votes["user"] + "_" + df_valid_votes["image_type"]
+            )
         else:
-            raise ValueError(f"image_type must be 'animated', 'static', 'both', or None. Got {image_type} instead.")
-        
+            raise ValueError(
+                f"image_type must be 'animated', 'static', 'both', or None. Got {image_type} instead."
+            )
+
         df_valid_votes.drop("image_type", axis="columns", inplace=True)
 
     fibr_votes = (
@@ -163,7 +173,15 @@ def _save_participants_tsv(qc_ratings, output_dir, image_type=None):
     )
 
 
-def xgb_qc(expert_rating_file, fibr_dir, xgb_model_dir, output_dir, random_state=42, image_type=None):
+def xgb_qc(
+    expert_rating_file,
+    fibr_dir,
+    xgb_model_dir,
+    output_dir,
+    fig_dir,
+    random_state=42,
+    image_type=None,
+):
     # Create the xgb model directory if it doesn't already exist
     os.makedirs(op.abspath(xgb_model_dir), exist_ok=True)
 
@@ -171,25 +189,26 @@ def xgb_qc(expert_rating_file, fibr_dir, xgb_model_dir, output_dir, random_state
         expert_rating_file=expert_rating_file, fibr_dir=fibr_dir, image_type=image_type
     )
 
-    Xqc = pd.DataFrame(index=y.index).merge(
-        df_qc,
-        how="left",
-        left_index=True,
-        right_index=True,
-    ).to_numpy()
+    Xqc = (
+        pd.DataFrame(index=y.index)
+        .merge(
+            df_qc,
+            how="left",
+            left_index=True,
+            right_index=True,
+        )
+        .to_numpy()
+    )
 
-    Xfibr = pd.DataFrame(index=y.index).merge(
-        fibr_votes,
-        how="left",
-        left_index=True,
-        right_index=True
-    ).to_numpy()
+    Xfibr = (
+        pd.DataFrame(index=y.index)
+        .merge(fibr_votes, how="left", left_index=True, right_index=True)
+        .to_numpy()
+    )
 
     X_columns = X.columns
     y = y.to_numpy()
     X = X.to_numpy()
-
-    print(X.shape)
 
     # Create parameter distributions for XGBoost
     params = {
@@ -230,9 +249,7 @@ def xgb_qc(expert_rating_file, fibr_dir, xgb_model_dir, output_dir, random_state
         try:
             xgb = XGBClassifier()
             xgb.load_model(
-                op.join(
-                    xgb_model_dir, f"{model_name}_seed-{random_state}_cv-{i}.json"
-                )
+                op.join(xgb_model_dir, f"{model_name}_seed-{random_state}_cv-{i}.json")
             )
             checkpointed[i] = True
             models[i] = xgb
@@ -250,9 +267,7 @@ def xgb_qc(expert_rating_file, fibr_dir, xgb_model_dir, output_dir, random_state
             )
             models[i].fit(X[train], y[train])
             models[i].best_estimator_.save_model(
-                op.join(
-                    xgb_model_dir, f"{model_name}_seed-{random_state}_cv-{i}.json"
-                )
+                op.join(xgb_model_dir, f"{model_name}_seed-{random_state}_cv-{i}.json")
             )
             checkpointed[i] = False
             explainer = shap.Explainer(
@@ -322,14 +337,13 @@ def xgb_qc(expert_rating_file, fibr_dir, xgb_model_dir, output_dir, random_state
             _tprs.append(interp_tpr)
             _aucs.append(roc_auc_score(y[test], _model.predict_proba(_X[test])[:, 1]))
 
-
     colors = plt.get_cmap("tab10").colors
 
     for _tprs, _aucs, color, label in zip(
         [tprs, qc_tprs, fibr_tprs],
         [aucs, qc_aucs, fibr_aucs],
         colors,
-        ["Fibr + dwiqc", "dwiqc only", "Fibr only"]
+        ["Fibr + dwiqc", "dwiqc only", "Fibr only"],
     ):
         mean_tpr = np.mean(_tprs, axis=0)
         mean_tpr[-1] = 1.0
@@ -353,10 +367,12 @@ def xgb_qc(expert_rating_file, fibr_dir, xgb_model_dir, output_dir, random_state
             tprs_upper,
             color="grey",
             alpha=0.2,
-            label=r"$\pm$ 1 std. dev." if label=="Fibr + dwiqc" else None,
+            label=r"$\pm$ 1 std. dev." if label == "Fibr + dwiqc" else None,
         )
 
-    ax.plot([0, 1], [0, 1], linestyle="--", lw=2, color=colors[3], label="Chance", alpha=0.8)
+    ax.plot(
+        [0, 1], [0, 1], linestyle="--", lw=2, color=colors[3], label="Chance", alpha=0.8
+    )
 
     ax.set(xlim=[-0.05, 1.05], ylim=[-0.05, 1.05])
     ax.legend(loc="lower right", fontsize=12)
@@ -372,7 +388,7 @@ def xgb_qc(expert_rating_file, fibr_dir, xgb_model_dir, output_dir, random_state
         shap_csv_title += "_" + image_type
         qc_csv_title += "_" + image_type
 
-    fig.savefig(op.join(output_dir, f"{plot_title}.pdf"), bbox_inches="tight")
+    fig.savefig(op.join(fig_dir, f"{plot_title}.pdf"), bbox_inches="tight")
 
     absmean_shap = pd.Series(
         index=X_columns,
@@ -416,6 +432,96 @@ def xgb_qc(expert_rating_file, fibr_dir, xgb_model_dir, output_dir, random_state
     _save_participants_tsv(qc_ratings, output_dir, image_type=image_type)
 
 
+def compute_irr_with_xgb_rater(expert_qc_dir, fibr_deriv_dir, fig_dir):
+    qc_files = glob(op.join(expert_qc_dir, "rater-*_qc.csv"))
+
+    expert_qc = dd.read_csv(
+        qc_files, usecols=["subject", "rating"], include_path_column=True
+    ).compute()
+    expert_qc["rater"] = (
+        expert_qc["path"]
+        .apply(lambda s: op.basename(s).replace("rater-", "").replace("_qc.csv", ""))
+        .astype(str)
+    )
+    expert_qc.drop("path", axis="columns", inplace=True)
+    expert_qc.reset_index(drop=True, inplace=True)
+
+    ratings = expert_qc.pivot(index="subject", columns="rater", values="rating")
+
+    fibr = pd.read_csv(op.join(fibr_deriv_dir, "participants.tsv"), sep="\t")
+    fibr["subject_id"] = fibr["subject_id"] + "_ses-HBNsite" + fibr["scan_site_id"]
+    fibr.drop(columns="scan_site_id", inplace=True)
+    fibr.dropna(inplace=True)
+    fibr.columns = ["subject", "rating"]
+    fibr["rating"] = np.rint((fibr["rating"] * 4 - 2).to_numpy()).astype(int)
+    fibr["rater"] = "xgb"
+    fibr = fibr[fibr["subject"].isin(ratings.index.to_list())]
+
+    expert_qc_with_xgb = pd.concat([expert_qc, fibr])
+
+    icc_with_xgb = (
+        pg.intraclass_corr(
+            data=expert_qc_with_xgb, targets="subject", raters="rater", ratings="rating"
+        )
+        .round(3)
+        .set_index("Type")
+        .filter(like="ICC3", axis="index")
+    )
+    icc_with_xgb.to_csv(op.join(fibr_deriv_dir, "icc.csv"))
+
+    fibr.set_index("subject", inplace=True)
+    fibr.drop(columns="rater", inplace=True)
+    fibr.columns = pd.Index(["xgb"], name="rater")
+
+    ratings = pd.merge(ratings, fibr, left_index=True, right_index=True)
+
+    cohen_kappas = {}
+    for rater in ratings.columns:
+        cohen_kappas[rater] = [
+            cohen_kappa_score(
+                ratings[rater].to_numpy(),
+                ratings[other_rater].to_numpy(),
+                labels=[-2, -1, 0, 1, 2],
+                weights="quadratic",
+            )
+            for other_rater in ratings.columns
+        ]
+
+    df_kappa = pd.DataFrame(cohen_kappas, index=ratings.columns)
+    for rater in ratings.columns:
+        df_kappa.loc[rater, rater] = np.nan
+
+    df_kappa["mean"] = df_kappa.mean(axis="columns")
+
+    # plot the heatmap for correlation matrix
+    grid_kws = {"width_ratios": (0.9, 0.05), "wspace": 0.3}
+    fig, (ax, cbar_ax) = plt.subplots(1, 2, gridspec_kw=grid_kws, figsize=(10, 10))
+
+    vmin = df_kappa.to_numpy().min()
+    vmax = df_kappa.to_numpy().max()
+
+    ax = sns.heatmap(
+        df_kappa,
+        # vmin=vmin, vmax=vmax, center=0.5,
+        cmap=sns.color_palette("Blues", as_cmap=True),
+        ax=ax,
+        cbar_ax=cbar_ax,
+        # square=False,
+        annot=True,
+        fmt=".2f",
+        mask=np.tril(np.ones_like(df_kappa.to_numpy())),
+    )
+
+    _ = ax.set_yticklabels(ax.get_yticklabels(), rotation=0, fontsize=18)
+    _ = ax.set_xticklabels(ax.get_xticklabels(), fontsize=18)
+    _ = ax.set_ylabel("rater", fontsize=18)
+    ax.set_title("Cohen's Kappa (inter-rater reliability)", fontsize=18)
+    fig.savefig(op.join(fig_dir, "expert-raters-cohens-kappa.pdf"), bbox_inches="tight")
+
+    df_kappa.loc["mean"] = df_kappa["mean"].to_list() + [df_kappa.mean().mean()]
+    df_kappa.to_csv(op.join(fibr_deriv_dir, "cohens_kappa.csv"))
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -431,8 +537,16 @@ if __name__ == "__main__":
         help="Directory in which to save/load XGBoost models.",
     )
     parser.add_argument(
+        "raw_expert_dir",
+        help="Directory containing raw expert ratings.",
+    )
+    parser.add_argument(
         "output_dir",
         help="Output directory.",
+    )
+    parser.add_argument(
+        "fig_dir",
+        help="Figure directory.",
     )
     parser.add_argument(
         "--random_state",
@@ -446,7 +560,7 @@ if __name__ == "__main__":
         default=None,
         help=(
             "Type of fibr image on which to estimate fibr ratings. By default, "
-            "statis image and animated image scores are averaged together. Use "
+            "static image and animated image scores are averaged together. Use "
             "'static' or 'animated' to limit fibr ratings to only static or "
             "animated image types respectively. Use 'both' to compute separate "
             "mean ratings for each image type."
@@ -460,6 +574,13 @@ if __name__ == "__main__":
         fibr_dir=args.fibr_dir,
         xgb_model_dir=args.xgb_model_dir,
         output_dir=args.output_dir,
+        fig_dir=args.fig_dir,
         random_state=args.random_state,
         image_type=args.image_type,
+    )
+
+    compute_irr_with_xgb_rater(
+        expert_qc_dir=args.raw_expert_dir,
+        fibr_deriv_dir=args.output_dir,
+        fig_dir=args.fig_dir,
     )

@@ -91,10 +91,10 @@ def main(
         device_alldata_dir = LOCAL_ALLDATA_DIR
 
     n_classes = 1
-    batch_size = 16
+    batch_size = 1
     volume_shape = (128, 128, 128, n_channels)
     block_shape = (128, 128, 128, n_channels)
-    num_parallel_calls = 8
+    num_parallel_calls = 1
 
     dataset_report = nobrainer.dataset.get_dataset(
         file_pattern=op.join(device_dataset_dir, "data-report_shard*.tfrec"),
@@ -105,7 +105,7 @@ def main(
         # block_shape=block_shape,
         augment=False,
         n_epochs=1,
-        num_parallel_calls=num_parallel_calls,
+        num_parallel_calls=1,
     )
 
     dataset_all = nobrainer.dataset.get_dataset(
@@ -117,7 +117,7 @@ def main(
         # block_shape=block_shape,
         augment=False,
         n_epochs=1,
-        num_parallel_calls=num_parallel_calls,
+        num_parallel_calls=1,
     )
 
     if compute_volume_numbers:
@@ -148,6 +148,8 @@ def main(
         compile_kwargs = {"steps_per_execution": report_steps // 2}
     else:
         compile_kwargs = {}
+
+    y_all_float = np.concatenate([y.numpy() for _, y in dataset_all])
 
     with scope:
         model = tf.keras.models.load_model(LOCAL_SAVED_MODEL_DIR)
@@ -201,7 +203,7 @@ def main(
     print("Predicting the entire dataset.")
     y_hat_all = model.predict(dataset_all, steps=all_steps)
     y_all = np.concatenate([y.numpy() for _, y in dataset_all])
-    df_all = pd.DataFrame(dict(y_true=np.squeeze(y_all), y_prob=np.squeeze(y_hat_all)))
+    df_all = pd.DataFrame(dict(y_true_float=np.squeeze(y_all_float), y_true_binarized=np.squeeze(y_all), y_prob=np.squeeze(y_hat_all)))
     df_all.to_csv(op.join(LOCAL_PREDICTION_OUTPUT_DIR, "all_data.csv"))
 
     fs.put(LOCAL_PREDICTION_OUTPUT_DIR, GCS_PREDICTION_OUTPUT_DIR, recursive=True)

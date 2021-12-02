@@ -1,5 +1,6 @@
 #!/bin/sh
 JOB_NAME=$1
+TARGET_CLASS=$2
 
 export GOOGLE_APPLICATION_CREDENTIALS=/home/google_application_credentials/${GOOGLE_APPLICATION_CREDENTIALS_FILE}
 
@@ -17,13 +18,11 @@ echo Using google account $(gcloud config get-value account)
 echo Using project $(gcloud config get-value project)
 echo Using TPU service accounts ${SVC_ACCOUNT} and ${TPU_SERVICE_ACCOUNT}
 
-MIN_SEED=0
-MAX_SEED=9
-for seed in $(seq ${MIN_SEED} ${MAX_SEED}); do
-    gcloud ai-platform jobs submit training ${JOB_NAME}_predict7_seed${seed} \
+for cc in true_pos true_neg false_pos false_neg; do
+    gcloud ai-platform jobs submit training ${JOB_NAME}_${cc} \
         --staging-bucket=gs://${BUCKET_NAME} \
-        --package-path=predictmodel \
-        --module-name=predictmodel.predict_tensorfa \
+        --package-path=ig \
+        --module-name=ig.integrated_gradients \
         --runtime-version=2.4 \
         --python-version=3.7 \
         --config=../config.yaml \
@@ -31,14 +30,14 @@ for seed in $(seq ${MIN_SEED} ${MAX_SEED}); do
         --project ${PROJECT_ID} \
         -- \
         --gcs_bucket=${BUCKET_NAME} \
-        --job_name=${JOB_NAME} \
         --n_channels=5 \
         --dataset_name=b0-tensorfa-dwiqc \
-        --dataset_seed=${seed} \
-        --model_loss=binary_crossentropy \
-        --compute-volume-numbers
+        --model_dir=b0_tensorfa_dwiqc \
+        --dataset_seed=8 \
+        --confusion_class=$cc \
+        --target_class=${TARGET_CLASS}
 done
 
-for seed in $(seq ${MIN_SEED} ${MAX_SEED}); do
-    gcloud ai-platform jobs describe ${JOB_NAME}_predict7_seed${seed}
+for cc in true_pos true_neg false_pos false_neg; do
+    gcloud ai-platform jobs describe ${JOB_NAME}_${cc}
 done

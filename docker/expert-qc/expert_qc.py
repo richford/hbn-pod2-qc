@@ -14,15 +14,15 @@ from glob import glob
 from sklearn.metrics import cohen_kappa_score
 
 
-def process_expert_qc(qc_dir):
-    qc_files = glob(op.join(qc_dir, "expertqc*.csv"))
+def process_expert_qc(input_dir, deriv_dir, fig_dir):
+    qc_files = glob(op.join(input_dir, "rater-*_qc.csv"))
 
     expert_qc = dd.read_csv(
         qc_files, usecols=["subject", "rating"], include_path_column=True
     ).compute()
     expert_qc["rater"] = (
         expert_qc["path"]
-        .apply(lambda s: op.basename(s).replace("expertqc-", "").replace(".csv", ""))
+        .apply(lambda s: op.basename(s).replace("rater-", "").replace("_qc.csv", ""))
         .astype(str)
     )
     expert_qc.drop("path", axis="columns", inplace=True)
@@ -42,7 +42,7 @@ def process_expert_qc(qc_dir):
     )
 
     mean_expert_rating.set_index("subject", drop=True, inplace=True)
-    mean_expert_rating.to_csv(op.join(qc_dir, "expert_ratings.csv"))
+    mean_expert_rating.to_csv(op.join(deriv_dir, "expert_ratings.csv"))
 
     ratings = expert_qc.pivot(index="subject", columns="rater", values="rating")
     cohen_kappas = {}
@@ -62,7 +62,7 @@ def process_expert_qc(qc_dir):
         df_kappa.loc[rater, rater] = np.nan
 
     df_kappa["mean"] = df_kappa.mean(axis="columns")
-    df_kappa.to_csv(op.join(qc_dir, "cohens_kappa.csv"))
+    df_kappa.to_csv(op.join(deriv_dir, "cohens_kappa.csv"))
 
     icc = (
         pg.intraclass_corr(
@@ -72,7 +72,7 @@ def process_expert_qc(qc_dir):
         .set_index("Type")
         .filter(like="ICC3", axis="index")
     )
-    icc.to_csv(op.join(qc_dir, "icc.csv"))
+    icc.to_csv(op.join(deriv_dir, "icc.csv"))
 
     fig, ax = plt.subplots(1, 2, figsize=(14, 5))
 
@@ -92,7 +92,9 @@ def process_expert_qc(qc_dir):
 
     _ = ax[0].set_title("Average expert ratings")
     _ = ax[1].set_title("Expert rating distribution")
-    fig.savefig(op.join(qc_dir, "expert_rating_distributions.pdf"), bbox_inches="tight")
+    fig.savefig(
+        op.join(fig_dir, "expert_rating_distributions.pdf"), bbox_inches="tight"
+    )
 
 
 if __name__ == "__main__":
@@ -101,9 +103,23 @@ if __name__ == "__main__":
         "input_dir",
         help="Directory containing expert QC csv files.",
     )
+    parser.add_argument(
+        "derived_data_dir",
+        help="Directory in which to save derived data.",
+    )
+    parser.add_argument(
+        "fig_dir",
+        help="Directory in which to save figures.",
+    )
     args = parser.parse_args()
-    in_dir = op.abspath(args.input_dir)
-    if not op.isdir(in_dir):
-        in_dir = op.dirname(in_dir)
+    directories = {
+        "input_dir": op.abspath(args.input_dir),
+        "deriv_dir": op.abspath(args.derived_data_dir),
+        "fig_dir": op.abspath(args.fig_dir),
+    }
 
-    process_expert_qc(in_dir)
+    for dir_ in directories.keys():
+        if not op.isdir(directories[dir_]):
+            directories[dir_] = op.dirname(directories[dir_])
+
+    process_expert_qc(**directories)
