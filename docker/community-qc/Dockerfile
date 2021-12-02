@@ -1,7 +1,8 @@
 FROM continuumio/miniconda3:4.9.2-alpine
 
 RUN conda config --add channels conda-forge
-RUN conda install dask[dataframe] ipython numpy matplotlib pandas pingouin s3fs scikit-learn=0.23.2 scikit-optimize shap tqdm xgboost
+COPY package-list.txt /package-list.txt
+RUN conda install --file /package-list.txt --yes
 
 COPY xgb-ratings.py /usr/local/bin/xgb-ratings.py
 RUN chmod +x /usr/local/bin/xgb-ratings.py 

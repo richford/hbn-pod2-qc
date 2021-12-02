@@ -14,10 +14,10 @@ services:
       - ./data/osfstorage/expert-qc:/input
       - ./data/derived/expert-qc:/derived-data
       - ./figures/expert-qc:/figures
-  xgb-ratings:
+  community-qc:
     build:
-      context: docker/xgb-ratings
-    image: hbn-pod2/xgb-ratings
+      context: docker/community-qc
+    image: hbn-pod2/community-qc
     volumes:
       - ./data/derived/expert-qc:/input/expert-ratings
       - ./data/osfstorage/community-qc:/input/fibr-ratings

@@ -8,6 +8,7 @@ import os
 import os.path as op
 import seaborn as sns
 
+from glob import glob
 from sklearn.metrics import auc
 from sklearn.metrics import roc_curve, roc_auc_score
 
@@ -23,7 +24,7 @@ def _get_report_df(glob):
     )
 
     df_report["seed"] = df_report["path"].apply(
-        lambda s: int(s.split("/seed_")[1].split("/")[0]), meta=("category")
+        lambda s: int(s.split(".csv")[0].split("-")[-1]), meta=("category")
     )
 
     df_report = df_report.drop("path", axis="columns").compute()
@@ -127,7 +128,7 @@ def visualize_loss_curves(log_dir, output_dir):
 
     for qc_key in log_paths.keys():
         df_training[qc_key]["seed"] = df_training[qc_key]["path"].apply(
-            lambda s: int(s.split("seed_")[1].split("/")[0])
+            lambda s: int(s.split(".csv")[0].split("-")[-1])
         )
 
         df_training[qc_key].drop(
@@ -189,8 +190,6 @@ def visualize_loss_curves(log_dir, output_dir):
 
 
 def visualize_model_architecture(saved_model_dir, output_dir):
-    print(saved_model_dir)
-    print(os.listdir(saved_model_dir))
     model = tf.keras.models.load_model(saved_model_dir)
     tf.keras.utils.plot_model(
         model,

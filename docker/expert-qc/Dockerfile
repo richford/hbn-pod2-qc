@@ -1,7 +1,8 @@
 FROM continuumio/miniconda3:4.9.2-alpine
 
 RUN conda config --add channels conda-forge
-RUN conda install dask[dataframe] matplotlib numpy pandas pingouin seaborn scikit-learn
+COPY package-list.txt /package-list.txt
+RUN conda install --file /package-list.txt --yes
 
 COPY expert_qc.py /usr/local/bin/expert_qc.py
 RUN chmod +x /usr/local/bin/expert_qc.py 
