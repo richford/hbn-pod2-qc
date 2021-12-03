@@ -80,4 +80,5 @@ services:
       - ./data/osfstorage/deep-learning-qc/saved-models/report-model:/input/saved-model
       - ./data/osfstorage/deep-learning-qc/training-logs:/input/training-logs
       - ./data/osfstorage/deep-learning-qc/report-set-predictions:/input/report-set-predictions
-      - ./figures/deep-learning-qc:/figures
+      - ./data/osfstorage/deep-learning-qc/integrated-gradients:/input/nifti-dir
+      - ./figures:/figures
