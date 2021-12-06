@@ -24,7 +24,7 @@ expert-qc:
 # Analyze community ratings and generate derived figures
 community-qc:
 	@echo "Analyzing community ratings and generating derived figures"
-	@docker compose run xgb-ratings 
+	@docker compose run community-qc
 
 # Plot figures for the deep learning QC pipeline
 deep-learning-figures:

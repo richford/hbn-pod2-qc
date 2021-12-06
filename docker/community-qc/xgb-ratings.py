@@ -522,6 +522,79 @@ def compute_irr_with_xgb_rater(expert_qc_dir, fibr_deriv_dir, fig_dir):
     df_kappa.to_csv(op.join(fibr_deriv_dir, "cohens_kappa.csv"))
 
 
+def plot_xgb_scatter(expert_rating_file, output_dir, fibr_dir, fig_dir):
+    X, _, df_qc, fibr_votes = _get_Xy(
+        expert_rating_file=expert_rating_file, fibr_dir=fibr_dir
+    )
+    y = pd.read_csv(expert_rating_file, index_col="subject")
+    X = (
+        pd.DataFrame(index=y.index)
+        .merge(fibr_votes, how="left", left_index=True, right_index=True)
+        .merge(
+            df_qc,
+            how="left",
+            left_index=True,
+            right_index=True,
+        )
+    )
+    xgb_qc = pd.read_csv(op.join(output_dir, "qc_ratings.csv"), index_col="Unnamed: 0")
+    merged = pd.merge(
+        pd.merge(y[["rating"]], xgb_qc, how="left", left_index=True, right_index=True),
+        pd.DataFrame(
+            X[fibr_votes.columns].mean(axis="columns"), columns=["fibr rating"]
+        ),
+        left_index=True,
+        right_index=True,
+    )
+    pairplot = sns.pairplot(
+        data=merged,
+        x_vars=["fibr rating", "fibr + qsiprep rating"],
+        y_vars=["rating"],
+        height=7,
+        plot_kws=dict(s=100),
+    )
+
+    fig, axes = pairplot.fig, pairplot.axes
+
+    fontsize = 24
+    axes[0, 0].set_ylabel("Expert rating", fontsize=fontsize)
+    axes[0, 0].set_xlabel("Fibr rating (unweighted)", fontsize=fontsize)
+    axes[0, 1].set_xlabel("XGB rating", fontsize=fontsize)
+
+    for ax in axes.flatten():
+        ax.tick_params(axis="both", which="major", labelsize=20)
+
+    fig.savefig(op.join(fig_dir, "fibr-rating-scatter-plot.pdf"), bbox_inches="tight")
+
+    X_all = pd.merge(X, y, left_index=True, right_index=True)
+    pairplot = sns.pairplot(
+        data=X_all,
+        x_vars=[
+            "raw_neighbor_corr",
+            "max_rel_translation",
+            "raw_num_bad_slices",
+            "rating",
+        ],
+        y_vars=["rating"],
+        height=5,
+        plot_kws=dict(s=100),
+    )
+    fig, axes = pairplot.fig, pairplot.axes
+
+    fontsize = 24
+    for ax in axes.flatten():
+        l = ax.get_xlabel()
+        ax.set_xlabel(l, fontsize=fontsize)
+        ax.tick_params(axis="both", which="major", labelsize=24)
+
+    _ = axes[0, 0].set_ylabel("Expert QC rating", fontsize=fontsize)
+    _ = axes[0, 3].set_xlabel("Expert QC rating", fontsize=fontsize)
+
+    fig.savefig(
+        op.join(fig_dir, "expert_qc_qsiprep_qc_scatter.pdf"), bbox_inches="tight"
+    )
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -582,5 +655,12 @@ if __name__ == "__main__":
     compute_irr_with_xgb_rater(
         expert_qc_dir=args.raw_expert_dir,
         fibr_deriv_dir=args.output_dir,
+        fig_dir=args.fig_dir,
+    )
+
+    plot_xgb_scatter(
+        expert_rating_file=args.expert_rating_file,
+        output_dir=args.output_dir,
+        fibr_dir=args.fibr_dir,
         fig_dir=args.fig_dir,
     )
