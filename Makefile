@@ -4,7 +4,7 @@ default: help
 help:
 	@cat $(MAKEFILE_LIST) | docker run --rm -i xanders/make-help
 
-all: build data expert-qc community-qc deep-learning-figures
+all: build data expert-qc community-qc deep-learning-figures bundle-profiles
 
 # Build all of the necessary docker images
 build:
@@ -30,6 +30,11 @@ community-qc:
 deep-learning-figures:
 	@echo "Plotting figures for the deep learning QC pipeline"
 	@docker compose run dl-figures 
+
+# Plot bundle profiles binned by QC score
+bundle-profiles:
+	@echo "Plotting bundle profiles binned by QC score"
+	@docker compose run bundle-profiles
 
 ##
 ## Commands for launching deep learning model training on GCP. For these commands to work, you must have a GCP account and set up your GCP environment variables in a .env file in this directory.  A template is provided in .env.template.

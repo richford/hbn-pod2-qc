@@ -82,3 +82,10 @@ services:
       - ./data/osfstorage/deep-learning-qc/report-set-predictions:/input/report-set-predictions
       - ./data/osfstorage/deep-learning-qc/integrated-gradients:/input/nifti-dir
       - ./figures:/figures
+  bundle-profiles:
+    build:
+      context: docker/bundle-profiles
+    image: hbn-pod2/bundle-profiles
+    volumes:
+      - ./figures/bundle-profiles:/figures
+      - $HOME/.aws:/root/.aws

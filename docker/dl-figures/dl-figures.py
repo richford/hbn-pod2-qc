@@ -89,10 +89,10 @@ def visualize_auc_curves(report_set_dir, output_dir):
     }
 
     colors = plt.get_cmap("tab10").colors
-    labels = ["DL: imaging + QC", "DL: imaging only"]
+    labels = ["CNN-i+q", "CNN-i"]
 
     mean_fpr = np.linspace(0, 1, 100)
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(6, 5))
 
     for df, label, color in zip(
         df_report.values(),

@@ -343,7 +343,7 @@ def xgb_qc(
         [tprs, qc_tprs, fibr_tprs],
         [aucs, qc_aucs, fibr_aucs],
         colors,
-        ["Fibr + dwiqc", "dwiqc only", "Fibr only"],
+        ["XGB", "XGB-q", "XGB-f"],
     ):
         mean_tpr = np.mean(_tprs, axis=0)
         mean_tpr[-1] = 1.0
@@ -380,11 +380,11 @@ def xgb_qc(
     ax.set_ylabel("True Positive Rate", fontsize=12)
     ax.set_title("Mean receiver operating characteristic (ROC)", fontsize=14)
 
-    plot_title = "xgb_roc_curve"
+    plot_title = "xgb-roc-curve"
     shap_csv_title = "xgb_shap_values"
     qc_csv_title = "qc_ratings"
     if image_type is not None:
-        plot_title += "_" + image_type
+        plot_title += "-" + image_type
         shap_csv_title += "_" + image_type
         qc_csv_title += "_" + image_type
 
@@ -567,32 +567,35 @@ def plot_xgb_scatter(expert_rating_file, output_dir, fibr_dir, fig_dir):
     fig.savefig(op.join(fig_dir, "fibr-rating-scatter-plot.pdf"), bbox_inches="tight")
 
     X_all = pd.merge(X, y, left_index=True, right_index=True)
-    pairplot = sns.pairplot(
-        data=X_all,
-        x_vars=[
-            "raw_neighbor_corr",
-            "max_rel_translation",
-            "raw_num_bad_slices",
-            "rating",
-        ],
-        y_vars=["rating"],
-        height=5,
-        plot_kws=dict(s=100),
-    )
-    fig, axes = pairplot.fig, pairplot.axes
 
-    fontsize = 24
-    for ax in axes.flatten():
-        l = ax.get_xlabel()
-        ax.set_xlabel(l, fontsize=fontsize)
-        ax.tick_params(axis="both", which="major", labelsize=24)
+    # Create two pairplots and stack them later using LaTeX
+    x_var_arrays = [
+        ["raw_neighbor_corr", "max_rel_translation"],
+        ["raw_num_bad_slices", "rating"],
+    ]
+    for x_vars, file_postfix in zip(x_var_arrays, ["top", "bottom"]):
+        pairplot = sns.pairplot(
+            data=X_all,
+            x_vars=x_vars,
+            y_vars=["rating"],
+            height=2.4,
+            plot_kws=dict(s=100),
+        )
+        fig, axes = pairplot.fig, pairplot.axes
 
-    _ = axes[0, 0].set_ylabel("Expert QC rating", fontsize=fontsize)
-    _ = axes[0, 3].set_xlabel("Expert QC rating", fontsize=fontsize)
+        fontsize = 24
+        for ax in axes.flatten():
+            l = ax.get_xlabel()
+            ax.set_xlabel(l, fontsize=fontsize)
+            ax.tick_params(axis="both", which="major", labelsize=24)
 
-    fig.savefig(
-        op.join(fig_dir, "expert_qc_qsiprep_qc_scatter.pdf"), bbox_inches="tight"
-    )
+        _ = axes[0, 0].set_ylabel("Expert QC rating", fontsize=fontsize)
+        _ = axes[0, 1].set_xlabel("Expert QC rating", fontsize=fontsize)
+
+        fig.savefig(
+            op.join(fig_dir, f"expert-qsiprep-pairplot-{file_postfix}.pdf"),
+            bbox_inches="tight",
+        )
 
 
 if __name__ == "__main__":
