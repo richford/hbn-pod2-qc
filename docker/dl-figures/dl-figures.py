@@ -416,9 +416,6 @@ def save_attribution_maps(nifti_dir, out_dir):
         for conf_class in confusion_classes
     }
 
-    fig, axes = plt.subplots(4, 4, figsize=(18, 18))
-    fig.tight_layout(h_pad=-2, w_pad=-2.75)
-
     subject_indices = {
         "true_pos": 1,
         "true_neg": 1,
@@ -440,7 +437,10 @@ def save_attribution_maps(nifti_dir, out_dir):
         "z": "DTI FA_z",
     }
 
-    for conf_class, ax_row in zip(confusion_classes, axes):
+    for conf_class in confusion_classes:
+        fig, ax_row = plt.subplots(1, 4, figsize=(18, 4.5))
+        fig.tight_layout(h_pad=-2, w_pad=-2.75)
+
         for channel, ax in zip(channels.keys(), ax_row):
             _ = plot_attribution(
                 attribution_maps,
@@ -455,17 +455,18 @@ def save_attribution_maps(nifti_dir, out_dir):
                 subject_idx=subject_indices[conf_class],
                 cut_coords=cut_coord[conf_class],
                 colorbar=False,
-                title=conf_class,
+                title=None,
                 annotate=True,
             )
 
-    for ax, label in zip(axes[0], channels.values()):
-        ax.set_title(label, fontsize=18)
+        if conf_class == "true_pos":
+            for ax, label in zip(ax_row, channels.values()):
+                ax.set_title(label, fontsize=18)
 
-    for ax, label in zip(axes.T[0], confusion_classes):
-        ax.set_ylabel(label, fontsize=18)
-
-    fig.savefig(op.join(out_dir, "attribution_maps.pdf"), bbox_inches="tight")
+        fig.savefig(
+            op.join(out_dir, f"attribution-maps-{conf_class.replace('_', '-')}.pdf"),
+            bbox_inches="tight",
+        )
 
 
 if __name__ == "__main__":

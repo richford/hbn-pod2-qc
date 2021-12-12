@@ -36,6 +36,11 @@ bundle-profiles:
 	@echo "Plotting bundle profiles binned by QC score"
 	@docker compose run bundle-profiles
 
+# Demonstrate the effect of QC on inference using an age prediction example
+inference:
+	@echo "Demonstrating the effect of QC on inference using an age prediction example"
+	@docker compose run inference
+
 ##
 ## Commands for launching deep learning model training on GCP. For these commands to work, you must have a GCP account and set up your GCP environment variables in a .env file in this directory.  A template is provided in .env.template.
 ##

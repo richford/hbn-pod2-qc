@@ -583,11 +583,11 @@ def plot_xgb_scatter(expert_rating_file, output_dir, fibr_dir, fig_dir):
         )
         fig, axes = pairplot.fig, pairplot.axes
 
-        fontsize = 24
+        fontsize = 14
         for ax in axes.flatten():
             l = ax.get_xlabel()
             ax.set_xlabel(l, fontsize=fontsize)
-            ax.tick_params(axis="both", which="major", labelsize=24)
+            ax.tick_params(axis="both", which="major", labelsize=fontsize)
 
         _ = axes[0, 0].set_ylabel("Expert QC rating", fontsize=fontsize)
         _ = axes[0, 1].set_xlabel("Expert QC rating", fontsize=fontsize)

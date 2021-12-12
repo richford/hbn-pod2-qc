@@ -89,3 +89,11 @@ services:
     volumes:
       - ./figures/bundle-profiles:/figures
       - $HOME/.aws:/root/.aws
+  inference:
+    build:
+      context: docker/inference
+    image: hbn-pod2/inference
+    volumes:
+      - ./figures/age-prediction:/figures
+      - ./data/osfstorage/inference:/inference
+      - $HOME/.aws:/root/.aws
