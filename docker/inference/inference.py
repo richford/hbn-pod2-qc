@@ -146,7 +146,6 @@ def age_predict_qc_sweep(out_dir, csv_dir, recompute=False, model_type="xgb"):
         ax=ax1,
         color=colors[1],
         label="Training set size (right axis)",
-        zorder=-1,
     )
     handles1, labels1 = ax1.get_legend_handles_labels()
     ax1.get_legend().remove()
