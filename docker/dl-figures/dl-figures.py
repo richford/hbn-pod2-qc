@@ -236,7 +236,7 @@ def visualize_loss_curves(log_dir, output_dir):
             ax.legend()
 
         fig.savefig(
-            op.join(output_dir, f"dl_learning_curve_{qc_key}.png"), bbox_inches="tight"
+            op.join(output_dir, f"dl_learning_curve_{qc_key}.pdf"), bbox_inches="tight"
         )
 
 
