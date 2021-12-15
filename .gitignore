@@ -1,5 +1,4 @@
-.DS_Store
-.ipynb_checkpoints
+**.ipynb_checkpoints
 
 data/derived/*
 data/osfstorage/*
@@ -13,3 +12,17 @@ sandbox/*
 .env
 .env.neurohackademy
 .env.direct
+
+__latexindent_temp.tex
+.refresh
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+
+**.DS_Store
+
+*.sw[op]
