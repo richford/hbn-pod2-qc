@@ -1,4 +1,4 @@
-FROM continuumio/miniconda3:4.9.2-alpine
+FROM hbn-pod2/base:conda-tex
 
 RUN apk add --update --no-cache graphviz
 RUN conda update -n base -c defaults conda

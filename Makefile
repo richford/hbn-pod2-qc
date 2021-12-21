@@ -9,6 +9,7 @@ all: build data expert-qc community-qc deep-learning-figures bundle-profiles
 # Build all of the necessary docker images
 build:
 	@echo "Building all of the necessary docker images"
+	@docker inspect hbn-pod2/base:conda-tex > /dev/null 2>&1 && echo "Base image already exists" || docker build -t hbn-pod2/base:conda-tex -f docker/base/Dockerfile docker/base
 	@docker compose build
 
 # Download data from OSF

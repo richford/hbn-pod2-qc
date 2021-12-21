@@ -1,4 +1,4 @@
-FROM continuumio/miniconda3:4.9.2-alpine
+FROM hbn-pod2/base:conda-tex
 
 RUN conda config --add channels conda-forge
 COPY package-list.txt /package-list.txt

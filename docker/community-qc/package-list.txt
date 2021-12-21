@@ -40,7 +40,7 @@ fsspec=2021.11.1=pyhd8ed1ab_0
 heapdict=1.0.1=py_0
 icu=67.1=he1b5a44_0
 idna=2.10=py_0
-ipython=7.30.0=py38h578d9bd_0
+ipython=7.30.1=py38h578d9bd_0
 jedi=0.18.1=py38h578d9bd_0
 jinja2=2.11.3=pyh44b312d_0
 jmespath=0.10.0=pyh9f0ad1d_0

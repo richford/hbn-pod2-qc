@@ -15,6 +15,7 @@ import seaborn as sns
 import shap
 
 from glob import glob
+from plot_formatting import set_size, FULL_WIDTH, TEXT_WIDTH
 from sklearn.ensemble import VotingClassifier
 from sklearn.metrics import auc
 from sklearn.metrics import roc_curve, roc_auc_score
@@ -25,6 +26,24 @@ from skopt import BayesSearchCV
 from tqdm.auto import tqdm
 from xgboost import XGBClassifier
 from xgboost.core import XGBoostError
+
+BBOX = dict(
+    linewidth=1,
+    facecolor="white",
+    edgecolor="black",
+    boxstyle="round,pad=0.25",
+)
+
+TEXT_KWARGS = dict(
+    x=0,
+    y=1,
+    ha="center",
+    va="center",
+    zorder=100,
+    fontweight="bold",
+    bbox=BBOX,
+    alpha=1.0,
+)
 
 
 def _get_Xy(expert_rating_file, fibr_dir, image_type=None):
@@ -129,48 +148,47 @@ def _get_Xy(expert_rating_file, fibr_dir, image_type=None):
 
 
 def _save_participants_tsv(qc_ratings, output_dir, image_type=None):
-    # Save these qc labels in a participants.tsv file
-    fs = s3fs.S3FileSystem(anon=True)
-    dwiqc_s3_uri = (
-        "s3://fcp-indi/data/Projects/HBN/BIDS_curated/derivatives/qsiprep/dwiqc.json"
-    )
-    with fs.open(dwiqc_s3_uri) as fp:
-        qc_json = json.load(fp)
-
-    dwiqc = pd.DataFrame(qc_json["subjects"])[["subject_id", "session_id"]]
-    dwiqc["EID"] = dwiqc["subject_id"].apply(lambda s: s.replace("sub-", ""))
-    dwiqc["scan_site_id"] = dwiqc["session_id"].apply(
-        lambda s: s.replace("ses-HBNsite", "")
-    )
-    dwiqc.drop("session_id", axis="columns", inplace=True)
-    dwiqc.set_index("EID", inplace=True)
-    dwiqc = dwiqc.merge(qc_ratings, left_index=True, right_index=True)
-
-    html_files = fs.glob(
-        "fcp-indi/data/Projects/HBN/BIDS_curated/derivatives/qsiprep/sub-*.html"
-    )
-    html_paths = [sub.replace(".html", "") for sub in html_files]
-    s3_paths = [fs.glob(sub + "/ses-HBNsite*")[0] for sub in html_paths]
-    s3_subs = [path.split("/qsiprep/")[1].split("/")[0] for path in s3_paths]
-    s3_sites = [path.split("ses-HBNsite")[-1] for path in s3_paths]
-    df_s3 = pd.DataFrame(index=s3_subs)
-    df_s3["scan_site_id"] = s3_sites
-    df_s3.index.name = "subject_id"
-
-    df_participants = df_s3.merge(
-        dwiqc.drop("scan_site_id", axis="columns"),
-        how="left",
-        left_index=True,
-        right_on="subject_id",
-    ).set_index("subject_id", drop=True)
-
     tsv_filename = "participants"
     if image_type is not None:
         tsv_filename += "_" + image_type
 
-    df_participants.to_csv(
-        op.join(output_dir, f"{tsv_filename}.tsv"), sep="\t", na_rep="n/a"
-    )
+    if not op.exists(op.join(output_dir, f"{tsv_filename}.tsv")):
+        # Save these qc labels in a participants.tsv file
+        fs = s3fs.S3FileSystem(anon=True)
+        dwiqc_s3_uri = "s3://fcp-indi/data/Projects/HBN/BIDS_curated/derivatives/qsiprep/dwiqc.json"
+        with fs.open(dwiqc_s3_uri) as fp:
+            qc_json = json.load(fp)
+
+        dwiqc = pd.DataFrame(qc_json["subjects"])[["subject_id", "session_id"]]
+        dwiqc["EID"] = dwiqc["subject_id"].apply(lambda s: s.replace("sub-", ""))
+        dwiqc["scan_site_id"] = dwiqc["session_id"].apply(
+            lambda s: s.replace("ses-HBNsite", "")
+        )
+        dwiqc.drop("session_id", axis="columns", inplace=True)
+        dwiqc.set_index("EID", inplace=True)
+        dwiqc = dwiqc.merge(qc_ratings, left_index=True, right_index=True)
+
+        html_files = fs.glob(
+            "fcp-indi/data/Projects/HBN/BIDS_curated/derivatives/qsiprep/sub-*.html"
+        )
+        html_paths = [sub.replace(".html", "") for sub in html_files]
+        s3_paths = [fs.glob(sub + "/ses-HBNsite*")[0] for sub in html_paths]
+        s3_subs = [path.split("/qsiprep/")[1].split("/")[0] for path in s3_paths]
+        s3_sites = [path.split("ses-HBNsite")[-1] for path in s3_paths]
+        df_s3 = pd.DataFrame(index=s3_subs)
+        df_s3["scan_site_id"] = s3_sites
+        df_s3.index.name = "subject_id"
+
+        df_participants = df_s3.merge(
+            dwiqc.drop("scan_site_id", axis="columns"),
+            how="left",
+            left_index=True,
+            right_on="subject_id",
+        ).set_index("subject_id", drop=True)
+
+        df_participants.to_csv(
+            op.join(output_dir, f"{tsv_filename}.tsv"), sep="\t", na_rep="n/a"
+        )
 
 
 def xgb_qc(
@@ -244,7 +262,7 @@ def xgb_qc(
 
     # While training, plot the roc curve for each split
     # Thanks sklearn examples, you rock!
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(1, 1, figsize=set_size(width=FULL_WIDTH / 3))
     for i, (train, test) in enumerate(tqdm(cv.split(X, y), total=6)):
         try:
             xgb = XGBClassifier()
@@ -353,8 +371,8 @@ def xgb_qc(
             mean_fpr,
             mean_tpr,
             color=color,
-            label=r"%s (AUC = %0.2f $\pm$ %0.2f)" % (label, mean_auc, std_auc),
-            lw=2,
+            label=r"%s (%0.2f $\pm$ %0.2f)" % (label, mean_auc, std_auc),
+            lw=1.5,
             alpha=0.8,
         )
 
@@ -371,14 +389,33 @@ def xgb_qc(
         )
 
     ax.plot(
-        [0, 1], [0, 1], linestyle="--", lw=2, color=colors[3], label="Chance", alpha=0.8
+        [0, 1],
+        [0, 1],
+        linestyle="--",
+        lw=1.5,
+        color=colors[3],
+        label="Chance",
+        alpha=0.8,
     )
 
     ax.set(xlim=[-0.05, 1.05], ylim=[-0.05, 1.05])
-    ax.legend(loc="lower right", fontsize=12)
-    ax.set_xlabel("False Positive Rate", fontsize=12)
-    ax.set_ylabel("True Positive Rate", fontsize=12)
-    ax.set_title("Mean receiver operating characteristic (ROC)", fontsize=14)
+    ax.legend(
+        loc="lower right",
+        bbox_to_anchor=(1.01, -0.025),
+        framealpha=1.0,
+        title="Model (AUC)",
+        labelspacing=0.25,
+        handlelength=1.25,
+        handletextpad=0.5,
+    )
+    ax.set_xlabel("False Positive Rate")
+    ax.set_ylabel("True Positive Rate")
+
+    ax.text(
+        s="c",
+        transform=ax.transAxes,
+        **TEXT_KWARGS,
+    )
 
     plot_title = "xgb-roc-curve"
     shap_csv_title = "xgb_shap_values"
@@ -494,11 +531,24 @@ def compute_irr_with_xgb_rater(expert_qc_dir, fibr_deriv_dir, fig_dir):
     df_kappa["mean"] = df_kappa.mean(axis="columns")
 
     # plot the heatmap for correlation matrix
-    grid_kws = {"width_ratios": (0.9, 0.05), "wspace": 0.3}
-    fig, (ax, cbar_ax) = plt.subplots(1, 2, gridspec_kw=grid_kws, figsize=(10, 10))
+    grid_kws = {"width_ratios": (0.9, 0.075), "wspace": 0.15}
+    width, height = set_size(width=0.4 * FULL_WIDTH)
+    fig, (ax, cbar_ax) = plt.subplots(
+        1, 2, gridspec_kw=grid_kws, figsize=(width, height * 1.5)
+    )
 
     vmin = df_kappa.to_numpy().min()
     vmax = df_kappa.to_numpy().max()
+
+    mapper = {
+        "awedTortoise8": "A",
+        "eagerHawk8": "B",
+        "gloomyJerky1": "C",
+        "grudgingBass4": "D",
+        "wornoutRhino9": "E",
+        "wrathfulMuesli7": "F",
+    }
+    df_kappa = df_kappa.rename(columns=mapper).rename(index=mapper)
 
     ax = sns.heatmap(
         df_kappa,
@@ -512,10 +562,16 @@ def compute_irr_with_xgb_rater(expert_qc_dir, fibr_deriv_dir, fig_dir):
         mask=np.tril(np.ones_like(df_kappa.to_numpy())),
     )
 
-    _ = ax.set_yticklabels(ax.get_yticklabels(), rotation=0, fontsize=18)
-    _ = ax.set_xticklabels(ax.get_xticklabels(), fontsize=18)
-    _ = ax.set_ylabel("rater", fontsize=18)
-    ax.set_title("Cohen's Kappa (inter-rater reliability)", fontsize=18)
+    _ = ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
+    _ = ax.set_xticklabels(ax.get_xticklabels())
+    _ = ax.set_ylabel("rater", labelpad=-1)
+    _ = ax.set_xlabel("rater")
+    _ = ax.text(
+        s="e",
+        transform=ax.transAxes,
+        **TEXT_KWARGS,
+    )
+    ax.set_title(r"Pairwise Cohen's $\kappa$")
     fig.savefig(op.join(fig_dir, "expert-raters-cohens-kappa.pdf"), bbox_inches="tight")
 
     df_kappa.loc["mean"] = df_kappa["mean"].to_list() + [df_kappa.mean().mean()]
@@ -546,56 +602,76 @@ def plot_xgb_scatter(expert_rating_file, output_dir, fibr_dir, fig_dir):
         left_index=True,
         right_index=True,
     )
-    pairplot = sns.pairplot(
-        data=merged,
-        x_vars=["fibr rating", "fibr + qsiprep rating"],
-        y_vars=["rating"],
-        height=7,
-        plot_kws=dict(s=100),
+
+    fig, axes = plt.subplots(
+        1,
+        2,
+        figsize=set_size(width=2 * FULL_WIDTH / 3, subplots=(1, 2)),
+        sharey=True,
     )
+    fig.tight_layout(pad=0)
 
-    fig, axes = pairplot.fig, pairplot.axes
+    for x_var, ax in zip(["fibr rating", "fibr + qsiprep rating"], axes):
+        _ = sns.scatterplot(data=merged, x=x_var, y="rating", s=18, ax=ax)
 
-    fontsize = 24
-    axes[0, 0].set_ylabel("Expert rating", fontsize=fontsize)
-    axes[0, 0].set_xlabel("Fibr rating (unweighted)", fontsize=fontsize)
-    axes[0, 1].set_xlabel("XGB rating", fontsize=fontsize)
+    axes[0].set_ylabel("Expert rating", labelpad=-0.25)
+    axes[0].set_xlabel("Mean Fibr rating")
+    axes[1].set_xlabel("XGB rating")
 
-    for ax in axes.flatten():
-        ax.tick_params(axis="both", which="major", labelsize=20)
+    for letter, ax in zip("ab", axes.flatten()):
+        ax.tick_params(axis="both", which="major")
+        ax.text(
+            s=letter,
+            transform=ax.transAxes,
+            **TEXT_KWARGS,
+        )
 
     fig.savefig(op.join(fig_dir, "fibr-rating-scatter-plot.pdf"), bbox_inches="tight")
 
     X_all = pd.merge(X, y, left_index=True, right_index=True)
 
-    # Create two pairplots and stack them later using LaTeX
-    x_var_arrays = [
-        ["raw_neighbor_corr", "max_rel_translation"],
-        ["raw_num_bad_slices", "rating"],
-    ]
-    for x_vars, file_postfix in zip(x_var_arrays, ["top", "bottom"]):
-        pairplot = sns.pairplot(
-            data=X_all,
-            x_vars=x_vars,
-            y_vars=["rating"],
-            height=2.4,
-            plot_kws=dict(s=100),
+    hist_ax = sns.histplot(data=X_all, x="rating")
+    hist_yticks = hist_ax.get_yticks()
+    hist_ylabels = hist_ax.get_yticklabels()
+
+    X_all.rename(
+        columns={
+            "rating": "Expert rating",
+            "raw_neighbor_corr": "NDC",
+            "raw_num_bad_slices": "Num outlier slices",
+            "max_rel_translation": "Max rel. translation",
+        },
+        inplace=True,
+    )
+
+    fig, axes = plt.subplots(
+        2, 2, figsize=set_size(width=0.6 * FULL_WIDTH, subplots=(2, 2))
+    )
+    fig.tight_layout()
+
+    for x_var, ax in zip(
+        ["NDC", "Num outlier slices", "Max rel. translation"], axes.flatten()[1:]
+    ):
+        _ = sns.scatterplot(data=X_all, x=x_var, y="Expert rating", s=14, ax=ax)
+
+    _ = sns.histplot(data=X_all, x="Expert rating", ax=axes[0, 0])
+
+    # tick_labels = axes[0, 0].get_yticklabels()
+    for letter, ax in zip("abcd", axes.flatten()):
+        label = ax.get_xlabel()
+        ax.set_xlabel(label, labelpad=-0.5)
+        label = ax.get_ylabel()
+        ax.set_ylabel(label, labelpad=-0.5)
+        ax.text(
+            s=letter,
+            transform=ax.transAxes,
+            **TEXT_KWARGS,
         )
-        fig, axes = pairplot.fig, pairplot.axes
 
-        fontsize = 14
-        for ax in axes.flatten():
-            l = ax.get_xlabel()
-            ax.set_xlabel(l, fontsize=fontsize)
-            ax.tick_params(axis="both", which="major", labelsize=fontsize)
-
-        _ = axes[0, 0].set_ylabel("Expert QC rating", fontsize=fontsize)
-        _ = axes[0, 1].set_xlabel("Expert QC rating", fontsize=fontsize)
-
-        fig.savefig(
-            op.join(fig_dir, f"expert-qsiprep-pairplot-{file_postfix}.pdf"),
-            bbox_inches="tight",
-        )
+    fig.savefig(
+        op.join(fig_dir, "expert-qsiprep-pairplot.pdf"),
+        bbox_inches="tight",
+    )
 
 
 if __name__ == "__main__":
@@ -645,25 +721,26 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    xgb_qc(
-        expert_rating_file=args.expert_rating_file,
-        fibr_dir=args.fibr_dir,
-        xgb_model_dir=args.xgb_model_dir,
-        output_dir=args.output_dir,
-        fig_dir=args.fig_dir,
-        random_state=args.random_state,
-        image_type=args.image_type,
-    )
+    with plt.style.context("/tex.mplstyle"):
+        xgb_qc(
+            expert_rating_file=args.expert_rating_file,
+            fibr_dir=args.fibr_dir,
+            xgb_model_dir=args.xgb_model_dir,
+            output_dir=args.output_dir,
+            fig_dir=args.fig_dir,
+            random_state=args.random_state,
+            image_type=args.image_type,
+        )
 
-    compute_irr_with_xgb_rater(
-        expert_qc_dir=args.raw_expert_dir,
-        fibr_deriv_dir=args.output_dir,
-        fig_dir=args.fig_dir,
-    )
+        compute_irr_with_xgb_rater(
+            expert_qc_dir=args.raw_expert_dir,
+            fibr_deriv_dir=args.output_dir,
+            fig_dir=args.fig_dir,
+        )
 
-    plot_xgb_scatter(
-        expert_rating_file=args.expert_rating_file,
-        output_dir=args.output_dir,
-        fibr_dir=args.fibr_dir,
-        fig_dir=args.fig_dir,
-    )
+        plot_xgb_scatter(
+            expert_rating_file=args.expert_rating_file,
+            output_dir=args.output_dir,
+            fibr_dir=args.fibr_dir,
+            fig_dir=args.fig_dir,
+        )

@@ -1,0 +1,12 @@
+text.usetex: True
+font.family: sans-serif
+font.sans-serif: T1/opensans-TLF
+axes.labelsize: 8
+font.size: 8
+legend.fontsize: 8
+xtick.labelsize: 7
+ytick.labelsize: 7
+xtick.direction: in
+ytick.direction: in
+xtick.top: True
+ytick.right: True
