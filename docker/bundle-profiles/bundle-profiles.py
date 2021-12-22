@@ -2,6 +2,7 @@
 
 import argparse
 import numpy as np
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import os
 import os.path as op
@@ -11,7 +12,26 @@ import seaborn as sns
 from afqinsight.datasets import AFQDataset
 from afqinsight.plot import plot_tract_profiles
 from neurocombat_sklearn import CombatModel
+from plot_formatting import set_size, FULL_WIDTH, TEXT_WIDTH
 from sklearn.impute import SimpleImputer
+
+BBOX = dict(
+    linewidth=1,
+    facecolor="white",
+    edgecolor="black",
+    boxstyle="round,pad=0.25",
+)
+
+TEXT_KWARGS = dict(
+    x=0,
+    y=1,
+    ha="center",
+    va="center",
+    zorder=100,
+    fontweight="bold",
+    bbox=BBOX,
+    alpha=1.0,
+)
 
 
 def plot_qc_bundle_profiles(fig_dir):
@@ -74,7 +94,9 @@ def plot_qc_stats(fig_dir):
         "Age",
     ]
 
-    fig, ax = plt.subplots(1, 2, figsize=(10, 5), sharey=True)
+    fig, ax = plt.subplots(
+        1, 2, figsize=set_size(width=TEXT_WIDTH, subplots=(1, 2)), sharey=True
+    )
     fig.tight_layout()
 
     hist_kws = dict(
@@ -87,44 +109,62 @@ def plot_qc_stats(fig_dir):
         bins=10,
     )
 
-    jointgrid = sns.jointplot(
-        data=participants,
-        x="Age",
-        y="QC Score",
-        kind="reg",
-        joint_kws=dict(
-            x_estimator=np.mean,
-            truncate=False,
-        ),
-        marginal_kws=dict(
-            kde=False,
-            discrete=True,
-        ),
-        height=5,
+    grid_kws = {"height_ratios": (0.18, 0.82), "hspace": 0}
+    width, height = set_size(width=0.5 * TEXT_WIDTH)
+    fig_reg, (dist_ax, reg_ax) = plt.subplots(
+        2, 1, gridspec_kw=grid_kws, figsize=(width, height), sharex=True
     )
 
+    _ = sns.histplot(
+        data=participants, x=participants["Age"], kde=False, discrete=True, ax=dist_ax
+    )
+
+    linewidth = mpl.rcParams["lines.linewidth"]
+    with mpl.rc_context({"lines.linewidth": linewidth / 2.5}):
+        _ = sns.regplot(
+            data=participants,
+            x="Age",
+            y="QC Score",
+            x_estimator=np.mean,
+            truncate=False,
+            ax=reg_ax,
+            scatter_kws=dict(s=11),
+        )
+
+    mpl.rcParams["lines.linewidth"] = linewidth
+
+    dist_ax.spines["top"].set_visible(False)
+    dist_ax.spines["right"].set_visible(False)
+    dist_ax.set_ylabel("")
+    dist_ax.spines["left"].set_visible(False)
+    dist_ax.get_yaxis().set_ticks([])
+
     # Set ylim and customize the xticks
-    jointgrid.ax_joint.set_ylim(0.38, 1)
-    jointgrid.ax_joint.set_xticks(list(range(5, 23, 5)))
+    reg_ax.set_ylim(0.38, 1)
+    reg_ax.set_xticks(list(range(5, 23, 5)))
+    dist_ax.set_xticks(list(range(5, 23, 5)))
 
-    # Remove the right marginal plot
-    jointgrid.fig.delaxes(jointgrid.ax_marg_y)
-
-    # Expand the width of the remaining axes to fill up the space left by the right marginal plot
-    # First get the bounding boxes of the remaining axes
-    joint_bounds = jointgrid.ax_joint.get_position().bounds
-    marg_bounds = jointgrid.ax_marg_x.get_position().bounds
-    total_width = joint_bounds[-1] + marg_bounds[-1]
-    joint_bounds = joint_bounds[:2] + (total_width, joint_bounds[-1])
-    marg_bounds = marg_bounds[:2] + (total_width, marg_bounds[-1])
-    jointgrid.ax_joint.set_position(joint_bounds)
-    jointgrid.ax_marg_x.set_position(marg_bounds)
+    visible_ticks = {"top": False, "bottom": False}
+    dist_ax.tick_params(axis="x", which="both", direction="out", **visible_ticks)
 
     _ = sns.histplot(hue="Sex", ax=ax[0], **hist_kws)
     _ = sns.histplot(hue="Scan Site", ax=ax[1], **hist_kws)
 
+    for axis, letter in zip(ax, "cd"):
+        _ = axis.text(
+            s=letter,
+            transform=axis.transAxes,
+            **TEXT_KWARGS,
+        )
+
     fig.savefig(op.join(fig_dir, "qc-hist.pdf"), bbox_inches="tight")
-    jointgrid.fig.savefig(op.join(fig_dir, "qc-age-jointplot.pdf"), bbox_inches="tight")
+
+    _ = dist_ax.text(
+        s="b",
+        transform=dist_ax.transAxes,
+        **TEXT_KWARGS,
+    )
+    fig_reg.savefig(op.join(fig_dir, "qc-age-jointplot.pdf"), bbox_inches="tight")
 
 
 if __name__ == "__main__":
@@ -136,5 +176,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    plot_qc_bundle_profiles(fig_dir=args.fig_dir)
-    plot_qc_stats(fig_dir=args.fig_dir)
+    with plt.style.context("/tex.mplstyle"):
+        # plot_qc_bundle_profiles(fig_dir=args.fig_dir)
+        plot_qc_stats(fig_dir=args.fig_dir)

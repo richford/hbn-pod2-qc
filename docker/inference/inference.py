@@ -1,6 +1,7 @@
 #!/opt/conda/bin/python
 
 import argparse
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import os.path as op
@@ -9,6 +10,7 @@ import seaborn as sns
 
 from afqinsight.datasets import AFQDataset
 from neurocombat_sklearn import CombatModel
+from plot_formatting import set_size, FULL_WIDTH, TEXT_WIDTH
 from sklearn.compose import TransformedTargetRegressor
 from sklearn.decomposition import PCA
 from sklearn.impute import SimpleImputer
@@ -126,38 +128,45 @@ def age_predict_qc_sweep(out_dir, csv_dir, recompute=False, model_type="xgb"):
     qc_df["Training set size"] = (n_splits - 1) / n_splits * qc_df["train_size"]
     colors = plt.get_cmap("tab10").colors
 
-    ax0 = sns.regplot(
-        data=qc_df,
-        x="cutoff",
-        y="score",
-        x_estimator=np.mean,
-        truncate=False,
-        color=colors[0],
-        fit_reg=False,
-        label="Age prediction R^2 (left axis)",
-    )
+    fig, ax0 = plt.subplots(figsize=set_size(width=0.5 * TEXT_WIDTH))
+
+    line_width_reduction = 0.5
+    linewidth = mpl.rcParams["lines.linewidth"]
+    with mpl.rc_context({"lines.linewidth": line_width_reduction * linewidth}):
+        _ = sns.regplot(
+            data=qc_df,
+            x="cutoff",
+            y="score",
+            x_estimator=np.mean,
+            truncate=False,
+            color=colors[0],
+            fit_reg=False,
+            scatter_kws={"s": 11},
+            label="Age prediction R^2 (left axis)",
+            ax=ax0,
+        )
     _ = ax0.set_xticks(np.linspace(0, 1, 11))
     ax1 = ax0.twinx()
     _ = sns.lineplot(
         data=qc_df,
         x="cutoff",
         y="Training set size",
-        lw=3,
+        lw=1,
         ax=ax1,
         color=colors[1],
         label="Training set size (right axis)",
     )
-    handles1, labels1 = ax1.get_legend_handles_labels()
+    handles1, _ = ax1.get_legend_handles_labels()
     ax1.get_legend().remove()
-    handles0, labels0 = ax0.get_legend_handles_labels()
+    handles0, _ = ax0.get_legend_handles_labels()
     handles = handles0 + handles1
-    labels = labels0 + labels1
+    labels = [r"$R^2$", "Training size"]
     _ = ax0.legend(handles, labels, loc="lower center")
 
     _ = ax0.set_xlabel("QC cutoff")
     _ = ax1.set_xlabel("QC cutoff")
     _ = ax0.set_ylabel(r"Age prediction $R^2$")
-    fig = ax0.get_figure()
+
     fig.savefig(op.join(out_dir, "qc_sweep.pdf"), bbox_inches="tight")
 
 
@@ -182,8 +191,9 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    age_predict_qc_sweep(
-        out_dir=args.fig_dir,
-        csv_dir=args.csv_scores_dir,
-        recompute=args.recompute,
-    )
+    with plt.style.context("/tex.mplstyle"):
+        age_predict_qc_sweep(
+            out_dir=args.fig_dir,
+            csv_dir=args.csv_scores_dir,
+            recompute=args.recompute,
+        )

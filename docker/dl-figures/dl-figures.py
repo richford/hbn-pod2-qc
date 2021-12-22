@@ -12,6 +12,7 @@ import seaborn as sns
 import warnings
 
 from glob import glob
+from plot_formatting import set_size, FULL_WIDTH, TEXT_WIDTH
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=FutureWarning)
@@ -24,6 +25,24 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 import tensorflow as tf
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+
+BBOX = dict(
+    linewidth=1,
+    facecolor="white",
+    edgecolor="black",
+    boxstyle="round,pad=0.25",
+)
+
+TEXT_KWARGS = dict(
+    x=0,
+    y=1,
+    ha="center",
+    va="center",
+    zorder=100,
+    fontweight="bold",
+    bbox=BBOX,
+    alpha=1.0,
+)
 
 
 def save_hbn_pod2_sankey(out_dir):
@@ -92,7 +111,7 @@ def visualize_auc_curves(report_set_dir, output_dir):
     labels = ["CNN-i+q", "CNN-i"]
 
     mean_fpr = np.linspace(0, 1, 100)
-    fig, ax = plt.subplots(figsize=(6, 5))
+    fig, ax = plt.subplots(1, 1, figsize=set_size(width=TEXT_WIDTH / 2))
 
     for df, label, color in zip(
         df_report.values(),
@@ -122,8 +141,8 @@ def visualize_auc_curves(report_set_dir, output_dir):
             mean_fpr,
             mean_tpr,
             color=color,
-            label=r"%s (AUC = %0.3f $\pm$ %0.3f)" % (label, mean_auc, std_auc),
-            lw=2,
+            label=r"%s (%0.3f $\pm$ %0.3f)" % (label, mean_auc, std_auc),
+            lw=1.5,
             alpha=0.8,
         )
 
@@ -140,14 +159,33 @@ def visualize_auc_curves(report_set_dir, output_dir):
         )
 
     _ = ax.plot(
-        [0, 1], [0, 1], linestyle="--", lw=2, color=colors[3], label="Chance", alpha=0.8
+        [0, 1],
+        [0, 1],
+        linestyle="--",
+        lw=1.5,
+        color=colors[3],
+        label="Chance",
+        alpha=0.8,
     )
 
     _ = ax.set(xlim=[-0.05, 1.05], ylim=[-0.05, 1.05])
-    _ = ax.legend(loc="lower right", fontsize=12)
-    _ = ax.set_xlabel("False Positive Rate", fontsize=12)
-    _ = ax.set_ylabel("True Positive Rate", fontsize=12)
-    _ = ax.set_title("Mean receiver operating characteristic (ROC)", fontsize=14)
+    _ = ax.legend(
+        loc="lower right",
+        bbox_to_anchor=(1.01, -0.025),
+        framealpha=1.0,
+        title="Model (AUC)",
+        labelspacing=0.25,
+        handlelength=1.25,
+        handletextpad=0.5,
+    )
+    _ = ax.set_xlabel("False Positive Rate")
+    _ = ax.set_ylabel("True Positive Rate")
+    # _ = ax.set_title("Mean ROC")
+    ax.text(
+        s="a",
+        transform=ax.transAxes,
+        **TEXT_KWARGS,
+    )
 
     fig.savefig(op.join(output_dir, "dl_roc_auc_curve.pdf"), bbox_inches="tight")
 
@@ -186,8 +224,21 @@ def visualize_loss_curves(log_dir, output_dir):
             ["path", "loss", "val_loss"], axis="columns", inplace=True
         )
 
-    for qc_key, training_df in df_training.items():
-        fig, axes = plt.subplots(3, 1, figsize=(8, 16))
+    for (qc_key, training_df), letter, title in zip(
+        df_training.items(), "ab", ["CNN-i+q", "CNN-i"]
+    ):
+        width, height = set_size(width=0.45 * TEXT_WIDTH, subplots=(3, 1))
+        fig, axes = plt.subplots(3, 1, figsize=(width, height * 0.8), sharex=True)
+
+        fig.tight_layout(h_pad=0)
+
+        axes[0].text(
+            s=letter,
+            transform=axes[0].transAxes,
+            **TEXT_KWARGS,
+        )
+
+        axes[0].set_title(title)
 
         metrics = [
             "binary_crossentropy",
@@ -212,28 +263,28 @@ def visualize_loss_curves(log_dir, output_dir):
             else:
                 best_val_metric = mean_val_metric.max()[0]
 
-            ax.axhline(
-                best_val_metric, ls="--", color="black", label="best validation score"
-            )
+            # ax.axhline(
+            #     best_val_metric, ls="--", color="black", label="best validation score"
+            # )
 
-            ax.annotate(
-                text=f"{best_val_metric:5.3f}",
-                xy=(0, best_val_metric),
-                xytext=(5, 5) if metric == "binary_crossentropy" else (5, -5),
-                textcoords="offset points",
-                ha="left",
-                va="bottom" if metric == "binary_crossentropy" else "top",
-            )
+            # ax.annotate(
+            #     text=f"{best_val_metric:5.3f}",
+            #     xy=(0, best_val_metric),
+            #     xytext=(5, 5) if metric == "binary_crossentropy" else (5, -5),
+            #     textcoords="offset points",
+            #     ha="left",
+            #     va="bottom" if metric == "binary_crossentropy" else "top",
+            # )
 
             ax.set_xlim(0)
 
             if metric in ["accuracy", "auc"]:
                 ax.set_ylim(0, 1)
 
-            ax.set_xlabel(ax.get_xlabel(), fontsize=14)
-            ax.set_ylabel(ax.get_ylabel(), fontsize=14)
+            ax.set_ylabel(ax.get_ylabel().replace("_", " "))
 
-            ax.legend()
+        axes[0].get_legend().remove()
+        axes[2].get_legend().remove()
 
         fig.savefig(
             op.join(output_dir, f"dl_learning_curve_{qc_key}.pdf"), bbox_inches="tight"
@@ -461,7 +512,7 @@ def save_attribution_maps(nifti_dir, out_dir):
 
         if conf_class == "true_pos":
             for ax, label in zip(ax_row, channels.values()):
-                ax.set_title(label, fontsize=18)
+                ax.set_title(label)
 
         fig.savefig(
             op.join(out_dir, f"attribution-maps-{conf_class.replace('_', '-')}.pdf"),
@@ -496,23 +547,26 @@ if __name__ == "__main__":
 
     dl_fig_dir = op.join(args.fig_dir, "deep-learning-qc")
 
-    visualize_model_architecture(
-        saved_model_dir=args.saved_model_dir,
-        output_dir=dl_fig_dir,
-    )
+    # visualize_model_architecture(
+    #     saved_model_dir=args.saved_model_dir,
+    #     output_dir=dl_fig_dir,
+    # )
 
-    visualize_loss_curves(
-        log_dir=args.training_log_dir,
-        output_dir=dl_fig_dir,
-    )
+    with plt.style.context("/tex.mplstyle"):
+        visualize_loss_curves(
+            log_dir=args.training_log_dir,
+            output_dir=dl_fig_dir,
+        )
 
-    visualize_auc_curves(
-        report_set_dir=args.report_set_dir,
-        output_dir=dl_fig_dir,
-    )
+        visualize_auc_curves(
+            report_set_dir=args.report_set_dir,
+            output_dir=dl_fig_dir,
+        )
 
-    save_hbn_pod2_sankey(args.fig_dir)
-    save_attribution_maps(
-        nifti_dir=args.nifti_dir,
-        out_dir=dl_fig_dir,
-    )
+    # save_hbn_pod2_sankey(args.fig_dir)
+
+    # with plt.style.context("/tex.mplstyle"):
+    #     save_attribution_maps(
+    #         nifti_dir=args.nifti_dir,
+    #         out_dir=dl_fig_dir,
+    #     )

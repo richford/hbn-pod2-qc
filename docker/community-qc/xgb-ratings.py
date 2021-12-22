@@ -16,6 +16,7 @@ import shap
 
 from glob import glob
 from plot_formatting import set_size, FULL_WIDTH, TEXT_WIDTH
+from scipy.stats import pearsonr
 from sklearn.ensemble import VotingClassifier
 from sklearn.metrics import auc
 from sklearn.metrics import roc_curve, roc_auc_score
@@ -262,7 +263,7 @@ def xgb_qc(
 
     # While training, plot the roc curve for each split
     # Thanks sklearn examples, you rock!
-    fig, ax = plt.subplots(1, 1, figsize=set_size(width=FULL_WIDTH / 3))
+    fig, ax = plt.subplots(1, 1, figsize=set_size(width=0.37 * FULL_WIDTH))
     for i, (train, test) in enumerate(tqdm(cv.split(X, y), total=6)):
         try:
             xgb = XGBClassifier()
@@ -606,7 +607,7 @@ def plot_xgb_scatter(expert_rating_file, output_dir, fibr_dir, fig_dir):
     fig, axes = plt.subplots(
         1,
         2,
-        figsize=set_size(width=2 * FULL_WIDTH / 3, subplots=(1, 2)),
+        figsize=set_size(width=0.63 * FULL_WIDTH, subplots=(1, 2)),
         sharey=True,
     )
     fig.tight_layout(pad=0)
@@ -653,6 +654,8 @@ def plot_xgb_scatter(expert_rating_file, output_dir, fibr_dir, fig_dir):
         ["NDC", "Num outlier slices", "Max rel. translation"], axes.flatten()[1:]
     ):
         _ = sns.scatterplot(data=X_all, x=x_var, y="Expert rating", s=14, ax=ax)
+        r, _ = pearsonr(X_all[x_var], X_all["Expert rating"])
+        print(f"Pearson_R({x_var}, Expert rating) = {r:.3f}")
 
     _ = sns.histplot(data=X_all, x="Expert rating", ax=axes[0, 0])
 
