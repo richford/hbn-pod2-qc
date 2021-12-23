@@ -36,7 +36,7 @@ BBOX = dict(
 )
 
 TEXT_KWARGS = dict(
-    x=0,
+    x=-0.15,
     y=1,
     ha="center",
     va="center",
@@ -44,6 +44,7 @@ TEXT_KWARGS = dict(
     fontweight="bold",
     bbox=BBOX,
     alpha=1.0,
+    fontsize=9,
 )
 
 
@@ -567,10 +568,12 @@ def compute_irr_with_xgb_rater(expert_qc_dir, fibr_deriv_dir, fig_dir):
     _ = ax.set_xticklabels(ax.get_xticklabels())
     _ = ax.set_ylabel("rater", labelpad=-1)
     _ = ax.set_xlabel("rater")
+    these_kwargs = TEXT_KWARGS.copy()
+    these_kwargs.update(dict(y=1.1))
     _ = ax.text(
         s="e",
         transform=ax.transAxes,
-        **TEXT_KWARGS,
+        **these_kwargs,
     )
     ax.set_title(r"Pairwise Cohen's $\kappa$")
     fig.savefig(op.join(fig_dir, "expert-raters-cohens-kappa.pdf"), bbox_inches="tight")
@@ -621,10 +624,13 @@ def plot_xgb_scatter(expert_rating_file, output_dir, fibr_dir, fig_dir):
 
     for letter, ax in zip("ab", axes.flatten()):
         ax.tick_params(axis="both", which="major")
+        these_kwargs = TEXT_KWARGS.copy()
+        if letter == "b":
+            these_kwargs.update(dict(x=0))
         ax.text(
             s=letter,
             transform=ax.transAxes,
-            **TEXT_KWARGS,
+            **these_kwargs,
         )
 
     fig.savefig(op.join(fig_dir, "fibr-rating-scatter-plot.pdf"), bbox_inches="tight")

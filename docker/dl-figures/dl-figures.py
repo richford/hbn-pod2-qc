@@ -34,7 +34,7 @@ BBOX = dict(
 )
 
 TEXT_KWARGS = dict(
-    x=0,
+    x=-0.15,
     y=1,
     ha="center",
     va="center",
@@ -42,6 +42,7 @@ TEXT_KWARGS = dict(
     fontweight="bold",
     bbox=BBOX,
     alpha=1.0,
+    fontsize=9,
 )
 
 
@@ -232,10 +233,12 @@ def visualize_loss_curves(log_dir, output_dir):
 
         fig.tight_layout(h_pad=0)
 
+        these_kwargs = TEXT_KWARGS.copy()
+        these_kwargs.update(dict(x=-0.2, y=1.1))
         axes[0].text(
             s=letter,
             transform=axes[0].transAxes,
-            **TEXT_KWARGS,
+            **these_kwargs,
         )
 
         axes[0].set_title(title)
@@ -263,19 +266,6 @@ def visualize_loss_curves(log_dir, output_dir):
             else:
                 best_val_metric = mean_val_metric.max()[0]
 
-            # ax.axhline(
-            #     best_val_metric, ls="--", color="black", label="best validation score"
-            # )
-
-            # ax.annotate(
-            #     text=f"{best_val_metric:5.3f}",
-            #     xy=(0, best_val_metric),
-            #     xytext=(5, 5) if metric == "binary_crossentropy" else (5, -5),
-            #     textcoords="offset points",
-            #     ha="left",
-            #     va="bottom" if metric == "binary_crossentropy" else "top",
-            # )
-
             ax.set_xlim(0)
 
             if metric in ["accuracy", "auc"]:
@@ -283,6 +273,7 @@ def visualize_loss_curves(log_dir, output_dir):
 
             ax.set_ylabel(ax.get_ylabel().replace("_", " "))
 
+        axes[0].set_ylim(0.17, 1.27)
         axes[0].get_legend().remove()
         axes[2].get_legend().remove()
 

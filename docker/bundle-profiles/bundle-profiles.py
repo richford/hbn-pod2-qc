@@ -23,7 +23,7 @@ BBOX = dict(
 )
 
 TEXT_KWARGS = dict(
-    x=0,
+    x=-0.15,
     y=1,
     ha="center",
     va="center",
@@ -31,6 +31,7 @@ TEXT_KWARGS = dict(
     fontweight="bold",
     bbox=BBOX,
     alpha=1.0,
+    fontsize=9,
 )
 
 
@@ -56,6 +57,7 @@ def plot_qc_bundle_profiles(fig_dir):
         None,
     )
 
+    figsize = set_size(width=FULL_WIDTH, subplots=(6, 4))
     qc_bin_figs = plot_tract_profiles(
         X_harmonized,
         groups=dataset.groups,
@@ -65,6 +67,8 @@ def plot_qc_bundle_profiles(fig_dir):
         bins=4,
         palette="plasma",
         legend_kwargs={"bbox_to_anchor": (0.5, 0.02)},
+        figsize=figsize,
+        fig_tight_layout_kws=dict(h_pad=0.5, w_pad=0),
     )
 
     for metric, fig in qc_bin_figs.items():
@@ -87,9 +91,9 @@ def plot_qc_stats(fig_dir):
     participants.columns = [
         "subject_id",
         "Scan Site",
-        "QC Score",
         "Sex",
         "Age raw",
+        "QC Score",
         "Age Bin",
         "Age",
     ]
@@ -151,10 +155,14 @@ def plot_qc_stats(fig_dir):
     _ = sns.histplot(hue="Scan Site", ax=ax[1], **hist_kws)
 
     for axis, letter in zip(ax, "cd"):
+        these_kwargs = TEXT_KWARGS.copy()
+        if letter == "d":
+            these_kwargs.update(dict(x=-0.05))
+
         _ = axis.text(
             s=letter,
             transform=axis.transAxes,
-            **TEXT_KWARGS,
+            **these_kwargs,
         )
 
     fig.savefig(op.join(fig_dir, "qc-hist.pdf"), bbox_inches="tight")
@@ -177,5 +185,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     with plt.style.context("/tex.mplstyle"):
-        # plot_qc_bundle_profiles(fig_dir=args.fig_dir)
+        plot_qc_bundle_profiles(fig_dir=args.fig_dir)
         plot_qc_stats(fig_dir=args.fig_dir)
