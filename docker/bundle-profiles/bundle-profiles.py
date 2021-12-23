@@ -1,18 +1,22 @@
 #!/opt/conda/bin/python
 
 import argparse
-import numpy as np
+import json
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import os
+import numpy as np
 import os.path as op
 import pandas as pd
+import s3fs
 import seaborn as sns
 
 from afqinsight.datasets import AFQDataset
 from afqinsight.plot import plot_tract_profiles
+from matplotlib.lines import Line2D
 from neurocombat_sklearn import CombatModel
 from plot_formatting import set_size, FULL_WIDTH, TEXT_WIDTH
+from seaborn.categorical import categorical_order
+from seaborn.palettes import color_palette
 from sklearn.impute import SimpleImputer
 
 BBOX = dict(
@@ -175,6 +179,139 @@ def plot_qc_stats(fig_dir):
     fig_reg.savefig(op.join(fig_dir, "qc-age-jointplot.pdf"), bbox_inches="tight")
 
 
+def plot_qsiprep_stats(fig_dir):
+    participants = pd.read_csv(
+        "s3://fcp-indi/data/Projects/HBN/BIDS_curated/derivatives/qsiprep/participants.tsv",
+        sep=None,
+        engine="python",
+        usecols=["subject_id", "sex", "scan_site_id", "age"],
+    )
+    participants.dropna(inplace=True)
+    participants["age_bin"] = pd.cut(participants["age"], bins=4)
+    participants["age_round"] = participants["age"].round().astype(int)
+    participants.columns = [
+        "subject_id",
+        "Scan Site",
+        "Sex",
+        "Age raw",
+        "Age Bin",
+        "Age",
+    ]
+    participants["subject_id"] = participants["subject_id"].apply(
+        lambda s: s.replace("sub-", "")
+    )
+    participants.set_index("subject_id", inplace=True)
+
+    fs = s3fs.S3FileSystem(anon=True)
+    dwiqc_s3_uri = (
+        "s3://fcp-indi/data/Projects/HBN/BIDS_curated/derivatives/qsiprep/dwiqc.json"
+    )
+    with fs.open(dwiqc_s3_uri) as fp:
+        qc_json = json.load(fp)
+
+    df_qc = pd.DataFrame(qc_json["subjects"])
+    df_qc["subject_id"] = df_qc["subject_id"].apply(lambda s: s.replace("sub-", ""))
+    df_qc.set_index("subject_id", drop=True, inplace=True)
+    df_qc.drop(
+        [
+            "participant_id",
+            "session_id",
+            "task_id",
+            "dir_id",
+            "acq_id",
+            "file_name",
+            "run_id",
+            "space_id",
+            "rec_id",
+        ],
+        axis="columns",
+        inplace=True,
+    )
+    df_qc = df_qc[
+        ["raw_neighbor_corr", "raw_num_bad_slices", "max_rel_translation"]
+    ].copy()
+    df_qc.columns = ["NDC", "Num outlier slices", "Max rel. translation"]
+    df_merged = df_qc.merge(participants, left_index=True, right_index=True)
+
+    figsize = set_size(width=TEXT_WIDTH, subplots=(4, 4))
+    fig, axes = plt.subplots(2, 2, figsize=figsize)
+    fig.tight_layout(pad=2)
+
+    _ = sns.violinplot(
+        x="Scan Site",
+        y="Age raw",
+        hue="Sex",
+        data=df_merged,
+        palette="colorblind",
+        split=True,
+        inner="quartile",
+        ax=axes[0, 0],
+        lw=1,
+    )
+
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    axes[0, 0].legend(
+        handles,
+        labels,
+        loc="upper right",
+        ncol=2,
+        title="Sex",
+        borderaxespad=0,
+        handlelength=1,
+        handletextpad=0.5,
+        columnspacing=1,
+        borderpad=0.2,
+    )
+
+    x_vars = ["NDC", "NDC", "Num outlier slices"]
+    y_vars = ["Num outlier slices", "Max rel. translation", "Max rel. translation"]
+
+    hue_order = categorical_order(df_merged["Age"])
+    palette = color_palette("viridis", len(hue_order))
+
+    for ax, x_var, y_var in zip(axes.flatten()[1:], x_vars, y_vars):
+        for idx, age in enumerate(hue_order):
+            _df = df_merged[df_merged["Age"] == age].copy()
+            _ = sns.scatterplot(
+                data=_df,
+                x=x_var,
+                y=y_var,
+                ax=ax,
+                legend=False,
+                color=palette[idx],
+                zorder=idx,
+                alpha=0.9,
+                s=11,
+            )
+
+    handles = [
+        Line2D([0], [0], color=color, ls="", marker="o", ms=4) for color in palette
+    ]
+
+    _ = axes[1, 0].legend(
+        handles,
+        hue_order,
+        title="Age",
+        loc="upper center",
+        bbox_to_anchor=(1.05, -0.25),
+        ncol=len(hue_order),
+        handletextpad=-0.5,
+        columnspacing=0.3,
+    )
+
+    for ax, letter in zip(axes.flatten(), "abcd"):
+        these_kwargs = TEXT_KWARGS.copy()
+        _ = ax.text(
+            s=letter,
+            transform=ax.transAxes,
+            **these_kwargs,
+        )
+
+    fig.savefig(
+        op.join(fig_dir, "qsiprep-metric-distributions.pdf"), bbox_inches="tight"
+    )
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -185,5 +322,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     with plt.style.context("/tex.mplstyle"):
-        plot_qc_bundle_profiles(fig_dir=args.fig_dir)
+        # plot_qc_bundle_profiles(fig_dir=args.fig_dir)
         plot_qc_stats(fig_dir=args.fig_dir)
+        plot_qsiprep_stats(fig_dir=args.fig_dir)
