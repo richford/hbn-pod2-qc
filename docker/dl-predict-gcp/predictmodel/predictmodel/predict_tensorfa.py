@@ -41,7 +41,7 @@ def main(
         strategy = tf.distribute.MirroredStrategy()
         print("GPUs detected.")
         print("Number of accelerators: ", strategy.num_replicas_in_sync)
-    
+
     # Train using mixed-precision policy
     tf.keras.mixed_precision.set_global_policy("mixed_float16")
 
@@ -197,13 +197,21 @@ def main(
     print("Predicting the report set.")
     y_hat_report = model.predict(dataset_report, steps=report_steps)
     y_report = np.concatenate([y.numpy() for _, y in dataset_report])
-    df_report = pd.DataFrame(dict(y_true=np.squeeze(y_report), y_prob=np.squeeze(y_hat_report)))
+    df_report = pd.DataFrame(
+        dict(y_true=np.squeeze(y_report), y_prob=np.squeeze(y_hat_report))
+    )
     df_report.to_csv(op.join(LOCAL_PREDICTION_OUTPUT_DIR, "report_set.csv"))
 
     print("Predicting the entire dataset.")
     y_hat_all = model.predict(dataset_all, steps=all_steps)
     y_all = np.concatenate([y.numpy() for _, y in dataset_all])
-    df_all = pd.DataFrame(dict(y_true_float=np.squeeze(y_all_float), y_true_binarized=np.squeeze(y_all), y_prob=np.squeeze(y_hat_all)))
+    df_all = pd.DataFrame(
+        dict(
+            y_true_float=np.squeeze(y_all_float),
+            y_true_binarized=np.squeeze(y_all),
+            y_prob=np.squeeze(y_hat_all),
+        )
+    )
     df_all.to_csv(op.join(LOCAL_PREDICTION_OUTPUT_DIR, "all_data.csv"))
 
     fs.put(LOCAL_PREDICTION_OUTPUT_DIR, GCS_PREDICTION_OUTPUT_DIR, recursive=True)

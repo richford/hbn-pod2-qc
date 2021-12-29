@@ -72,6 +72,22 @@ services:
       - "127.0.0.1:9005:9005"
     stdin_open: true
     tty: true
+  dl-site-generalization-gcp:
+    build:
+      context: docker/dl-site-generalization-gcp
+    image: hbn-pod2/dl-site-generalization-gcp
+    volumes:
+      - ${GOOGLE_APPLICATION_CREDENTIALS_DIR}:/home/google_application_credentials/
+    environment:
+      - PROJECT_ID=${PROJECT_ID}
+      - BUCKET_NAME=${BUCKET_NAME}
+      - CLOUDSDK_CORE_ACCOUNT=${CLOUDSDK_CORE_ACCOUNT}
+      - GOOGLE_APPLICATION_CREDENTIALS_FILE=${GOOGLE_APPLICATION_CREDENTIALS_FILE}
+      - TPU_SERVICE_ACCOUNT=${TPU_SERVICE_ACCOUNT}
+    ports:
+      - "127.0.0.1:9005:9005"
+    stdin_open: true
+    tty: true
   dl-figures:
     build:
       context: docker/dl-figures
