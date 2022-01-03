@@ -8,6 +8,7 @@ COPY xgb-ratings.py /usr/local/bin/xgb-ratings.py
 RUN chmod +x /usr/local/bin/xgb-ratings.py 
 
 ENV OUTDATED_IGNORE 1
+LABEL org.opencontainers.image.authors="richiehalford@gmail.com"
 
 ENTRYPOINT ["xgb-ratings.py"]
 CMD ["/input/expert-ratings/expert_ratings.csv", \

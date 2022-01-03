@@ -6,6 +6,20 @@ services:
     image: hbn-pod2/osf-download
     volumes:
       - ./data/:/home/8cy32/
+  nifti-download:
+    build:
+      context: docker/osf-download
+    image: hbn-pod2/osf-download
+    volumes:
+      - ./data/:/home/8cy32/
+    command: /nifti_file_list.txt
+  tfrec-download:
+    build:
+      context: docker/osf-download
+    image: hbn-pod2/osf-download
+    volumes:
+      - ./data/:/home/8cy32/
+    command: /tfrec_file_list.txt
   expert-qc:
     build:
       context: docker/expert-qc

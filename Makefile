@@ -1,4 +1,8 @@
 default: help
+.PHONY: help build data niftis tfrecs
+.PHONY: expert-qc community-qc
+.PHONY: deep-learning-figures bundle-profiles inference
+.PHONY: dl-train dl-predict dl-site-generalization dl-integrated-gradients
 
 # Show this help message
 help:
@@ -16,6 +20,18 @@ build:
 data:
 	@echo "Downloading data from OSF"
 	@docker compose run osf-download
+	@echo "This download excluded the NIfTI files and TFRecords, which are large and can be time consuming to download."
+	@echo "To download those files, use the make niftis and make tfrecs commands, respectively."
+
+# Download nifti files from OSF
+niftis:
+	@echo "Downloading NIfTI files from OSF"
+	@docker compose run nifti-download
+
+# Download tfrecs files from OSF
+tfrecs:
+	@echo "Downloading tfrecs from OSF"
+	@docker compose run tfrec-download
 
 # Analyze expert ratings and generate derived figures
 expert-qc:
@@ -55,6 +71,11 @@ dl-train:
 dl-predict:
 	@echo "Launching deep learning model prediction on GCP"
 	@docker compose run dl-predict-gcp
+
+# Train site generalization models on GCP
+dl-site-generalization:
+	@echo "Launching site generalization model training on GCP"
+	@docker compose run dl-site-generalization-gcp
 
 # Generate attribution maps using integrated gradients on GCP
 dl-integrated-gradients:

@@ -5,7 +5,10 @@ import numpy as np
 import os
 import os.path as op
 import pandas as pd
+import re
 import tensorflow as tf
+
+from glob import glob
 
 
 def build_multi_input_model(
@@ -106,177 +109,6 @@ def label_y(x, y):
     return x, tf.cast(y >= 0.5, dtype=tf.int32)
 
 
-def get_site_datasets(
-    device_dataset_dir,
-    n_classes,
-    batch_size,
-    volume_shape,
-    num_parallel_calls=2,
-):
-    dataset_all = nobrainer.dataset.get_dataset(
-        file_pattern=op.join(device_dataset_dir, "data-all_shard*.tfrec"),
-        n_classes=n_classes,
-        batch_size=batch_size,
-        volume_shape=volume_shape,
-        scalar_label=True,
-        # block_shape=block_shape,
-        augment=True,
-        n_epochs=1,
-        num_parallel_calls=num_parallel_calls,
-    )
-    filepaths = pd.read_csv(op.join(device_dataset_dir, "filepaths.csv"))
-    filepaths.columns = ["subject_id", "nifti_path", "xgb_qc"]
-    filepaths.set_index("subject_id", inplace=True, drop=True)
-
-    s3_participants = pd.read_csv(
-        "s3://fcp-indi/data/Projects/HBN/BIDS_curated/derivatives/qsiprep/participants.tsv",
-        sep="\t",
-        usecols=["subject_id", "scan_site_id", "expert_qc_score"],
-        index_col="subject_id",
-    )
-
-    participants = filepaths.merge(
-        s3_participants, how="left", left_index=True, right_index=True
-    )
-
-    # Get site inclusion indices for both the report set and
-    # the remaining train/validate/test (tvt) sets
-    # Take out the report set by checking for existence of expert QC scores
-    sites = ["RU", "CBIC", "CUNY"]
-    site_indices = {
-        "report": {
-            site: np.where(
-                np.logical_and(
-                    np.logical_and(
-                        participants["scan_site_id"] == site,
-                        ~participants["expert_qc_score"].isna(),
-                    ),
-                    ~participants["xgb_qc"].isna(),
-                )
-            )[0]
-            for site in sites
-        },
-        "tvt": {
-            site: np.where(
-                np.logical_and(
-                    np.logical_and(
-                        participants["scan_site_id"] == site,
-                        participants["expert_qc_score"].isna(),
-                    ),
-                    ~participants["xgb_qc"].isna(),
-                )
-            )[0]
-            for site in sites
-        },
-    }
-
-    def sub_match(target_indices):
-        def is_sub(idx, tensor):
-            return tf.math.reduce_any(tf.math.equal(idx, target_indices))
-
-        return is_sub
-
-    site_datasets = {
-        dset: {
-            site: {
-                "indices": idx,
-                "subject_ids": participants.iloc[idx].index.tolist(),
-                "dataset": dataset_all.enumerate()
-                .filter(sub_match(idx))
-                .map(lambda i, x: x)
-                .unbatch(),
-            }
-            for site, idx in site_indices.items()
-        }
-        for dset, site_indices in site_indices.items()
-    }
-
-    return site_datasets
-
-
-def split_datasets(
-    site_datasets,
-    train_sites_in,
-    test_sites_in,
-    batch_size,
-    n_epochs,
-    seed,
-    train_fraction=0.8,
-):
-    train_sites = train_sites_in.copy()
-    test_sites = test_sites_in.copy()
-
-    _train_site = train_sites.pop()
-    _test_site = test_sites.pop()
-
-    train_validate_dataset = site_datasets["tvt"][_train_site]["dataset"]
-    train_validate_size = len(site_datasets["tvt"][_train_site]["subject_ids"])
-
-    test_dataset = site_datasets["tvt"][_test_site]["dataset"]
-    test_size = len(site_datasets["tvt"][_test_site]["subject_ids"])
-    test_subjects = site_datasets["tvt"][_test_site]["subject_ids"]
-
-    report_dataset = site_datasets["report"][_test_site]["dataset"]
-    report_size = len(site_datasets["report"][_test_site]["subject_ids"])
-    report_subjects = site_datasets["report"][_test_site]["subject_ids"]
-
-    for _train_site in train_sites:
-        train_validate_dataset = train_validate_dataset.concatenate(
-            site_datasets["tvt"][_train_site]["dataset"], name="concatenate_train_sites"
-        )
-
-        train_validate_size += len(site_datasets["tvt"][_train_site]["subject_ids"])
-
-    for _test_site in test_sites:
-        test_dataset = test_dataset.concatenate(
-            site_datasets["tvt"][_test_site]["dataset"], name="concatenate_test_sites"
-        )
-        report_dataset = report_dataset.concatenate(
-            site_datasets["report"][_test_site]["dataset"],
-            name="concatenate_report_sites",
-        )
-
-        test_size += len(site_datasets["tvt"][_test_site]["subject_ids"])
-        report_size += len(site_datasets["report"][_test_site]["subject_ids"])
-
-        test_subjects.extend(site_datasets["tvt"][_test_site]["subject_ids"])
-        report_subjects.extend(site_datasets["report"][_test_site]["subject_ids"])
-
-    train_validate_dataset = train_validate_dataset.shuffle(
-        buffer_size=train_validate_size, seed=seed
-    )
-
-    train_size = int(train_fraction * train_validate_size)
-    train_dataset = train_validate_dataset.take(train_size)
-    validate_dataset = train_validate_dataset.skip(train_size)
-
-    train_dataset = train_dataset.batch(batch_size=batch_size)
-    validate_dataset = validate_dataset.batch(batch_size=batch_size)
-    test_dataset = test_dataset.batch(batch_size=batch_size)
-    report_dataset = report_dataset.batch(batch_size=batch_size)
-
-    train_dataset = train_dataset.repeat(n_epochs)
-
-    return {
-        "datasets": {
-            "train": train_dataset,
-            "validate": validate_dataset,
-            "test": test_dataset,
-            "report": report_dataset,
-        },
-        "subjects": {
-            "test": test_subjects,
-            "report": report_subjects,
-        },
-        "sizes": {
-            "train": train_size,
-            "validate": train_validate_size - train_size,
-            "test": test_size,
-            "report": report_size,
-        },
-    }
-
-
 def main(
     gcs_bucket,
     job_name,
@@ -349,56 +181,135 @@ def main(
 
     # Specify the datasets on GCP storage
     GCS_DATA_PATH = f"gs://{gcs_bucket}"
-    GCS_DATASET_DIR = op.join(GCS_DATA_PATH, "tfrecs", dataset_name, "all-data")
+    GCS_NIFTI_DIR = op.join(GCS_DATA_PATH, "nifti")
+    GCS_TFREC_DIR = op.join(GCS_DATA_PATH, "tfrecs")
 
     if use_tpu:
-        device_dataset_dir = GCS_DATASET_DIR
+        device_nifti_dir = GCS_NIFTI_DIR
+        device_tfrec_dir = GCS_TFREC_DIR
     else:
-        LOCAL_DATASET_DIR = op.join(".", "tfrecs", dataset_name, "all-data")
-        os.makedirs(LOCAL_DATASET_DIR, exist_ok=True)
-        fs.get(GCS_DATASET_DIR, LOCAL_DATASET_DIR, recursive=True)
-        device_dataset_dir = LOCAL_DATASET_DIR
+        LOCAL_NIFTI_DIR = op.join(".", "nifti")
+        LOCAL_TFREC_DIR = op.join(".", "tfrecs")
+        os.makedirs(LOCAL_NIFTI_DIR, exist_ok=True)
+        os.makedirs(LOCAL_TFREC_DIR, exist_ok=True)
+        fs.get(GCS_NIFTI_DIR, LOCAL_NIFTI_DIR, recursive=True)
+        fs.get(GCS_TFREC_DIR, LOCAL_TFREC_DIR, recursive=True)
+        device_nifti_dir = LOCAL_NIFTI_DIR
+        device_tfrec_dir = LOCAL_TFREC_DIR
+
+    train_validate_tfrec_dir = op.join(
+        device_tfrec_dir,
+        "_".join(train_sites),
+        f"seed-{dataset_seed}",
+    )
+
+    test_report_tfrec_dir = op.join(
+        device_tfrec_dir,
+        "_".join(test_sites),
+    )
 
     n_classes = 1
     batch_size = 16
     volume_shape = (128, 128, 128, n_channels)
     block_shape = (128, 128, 128, n_channels)
-    num_parallel_calls = 8
+    num_parallel_calls = 4
 
-    site_datasets = get_site_datasets(
-        device_dataset_dir=device_dataset_dir,
-        n_classes=n_classes,
-        batch_size=batch_size,
-        volume_shape=volume_shape,
-        num_parallel_calls=num_parallel_calls,
+    s3_participants = pd.read_csv(
+        "s3://fcp-indi/data/Projects/HBN/BIDS_curated/derivatives/qsiprep/participants.tsv",
+        sep="\t",
+        usecols=["subject_id", "scan_site_id", "expert_qc_score", "xgb_qc_score"],
+        index_col="subject_id",
     )
 
-    datasets = split_datasets(
-        site_datasets=site_datasets,
-        train_sites_in=train_sites,
-        test_sites_in=test_sites,
-        batch_size=batch_size,
-        n_epochs=n_epochs,
-        seed=dataset_seed,
+    nifti_files = [
+        op.abspath(filename) for filename in glob(f"{device_nifti_dir}/*.nii.gz")
+    ]
+    nifti_files = [fn for fn in nifti_files if "irregularsize" not in fn]
+    sub_id_pattern = re.compile("sub-[a-zA-Z0-9]*")
+    subjects = [sub_id_pattern.search(s).group(0) for s in nifti_files]
+
+    participants = pd.DataFrame(data=nifti_files, index=subjects, columns=["features"])
+    participants = participants.merge(
+        s3_participants, left_index=True, right_index=True, how="left"
+    )
+    participants.dropna(subset=["xgb_qc_score"], inplace=True)
+    participants.rename(columns={"xgb_qc_score": "labels"}, inplace=True)
+
+    # Get site inclusion indices for both the report set and
+    # the remaining train/validate/test (tvt) sets
+    # Take out the report set by checking for existence of expert QC scores
+    split_dataframes = {
+        "report": participants.loc[
+            np.logical_and(
+                participants["scan_site_id"].isin(test_sites),
+                ~participants["expert_qc_score"].isna(),
+            )
+        ],
+        "test": participants.loc[
+            np.logical_and(
+                participants["scan_site_id"].isin(test_sites),
+                participants["expert_qc_score"].isna(),
+            )
+        ],
+    }
+
+    test_size = len(split_dataframes["test"])
+    report_size = len(split_dataframes["report"])
+    num_volumes = pd.read_csv(
+        op.join(train_validate_tfrec_dir, "num_volumes.csv"), index_col="split"
     )
 
-    dataset_train = datasets["datasets"]["train"]
-    dataset_validate = datasets["datasets"]["validate"]
-    dataset_test = datasets["datasets"]["test"]
-    dataset_report = datasets["datasets"]["report"]
-    dataset_sizes = datasets["sizes"]
+    assert test_size == num_volumes.loc["test"].to_numpy()[0]
+    assert report_size == num_volumes.loc["report"].to_numpy()[0]
+    train_size = num_volumes.loc["train"].to_numpy()[0]
+    validate_size = num_volumes.loc["validate"].to_numpy()[0]
+
+    train_sites_str = "data-" + "_".join(train_sites)
+    test_sites_str = "data-" + "_".join(test_sites)
+    split_patterns = {
+        "train": op.join(
+            train_validate_tfrec_dir, f"{train_sites_str}-train_shard*.tfrec"
+        ),
+        "validate": op.join(
+            train_validate_tfrec_dir, f"{train_sites_str}-validate_shard*.tfrec"
+        ),
+        "test": op.join(
+            train_validate_tfrec_dir, f"{test_sites_str}-test_shard*.tfrec"
+        ),
+        "report": op.join(
+            train_validate_tfrec_dir, f"{test_sites_str}-report_shard*.tfrec"
+        ),
+    }
+
+    datasets = {
+        split: nobrainer.dataset.get_dataset(
+            file_pattern=file_pattern,
+            n_classes=n_classes,
+            batch_size=batch_size,
+            volume_shape=volume_shape,
+            scalar_label=True,
+            # block_shape=block_shape,
+            augment=True,
+            n_epochs=None if split == "train" else 1,
+            num_parallel_calls=num_parallel_calls,
+        )
+        for split, file_pattern in split_patterns.items()
+    }
 
     if compute_volume_numbers:
-        n_train_volumes = sum(len(y) for _, y in dataset_train.as_numpy_iterator())
+        n_train_volumes = sum(len(y) for _, y in datasets["train"].as_numpy_iterator())
         n_validate_volumes = sum(
-            len(y) for _, y in dataset_validate.as_numpy_iterator()
+            len(y) for _, y in datasets["validate"].as_numpy_iterator()
         )
-        n_test_volumes = sum(len(y) for _, y in dataset_test.as_numpy_iterator())
+        n_test_volumes = sum(len(y) for _, y in datasets["test"].as_numpy_iterator())
+        n_report_volumes = sum(
+            len(y) for _, y in datasets["report"].as_numpy_iterator()
+        )
     else:
-        n_train_volumes = dataset_sizes["train"] // batch_size * batch_size
-        n_validate_volumes = dataset_sizes["validate"] // batch_size * batch_size
-        n_test_volumes = dataset_sizes["test"] // batch_size * batch_size
-        n_report_volumes = dataset_sizes["report"] // batch_size * batch_size
+        n_train_volumes = train_size // batch_size * batch_size
+        n_validate_volumes = validate_size // batch_size * batch_size
+        n_test_volumes = test_size // batch_size * batch_size
+        n_report_volumes = report_size // batch_size * batch_size
 
     print("n_train_volumes: ", n_train_volumes)
     print("n_validate_volumes: ", n_validate_volumes)
@@ -475,13 +386,16 @@ def main(
                 # run_eagerly=True,
             )
         elif model_loss == "binary_crossentropy":
-            dataset_train = dataset_train.map(
+            datasets["train"] = datasets["train"].map(
                 label_y, num_parallel_calls=num_parallel_calls
             )
-            dataset_validate = dataset_validate.map(
+            datasets["validate"] = datasets["validate"].map(
                 label_y, num_parallel_calls=num_parallel_calls
             )
-            dataset_test = dataset_test.map(
+            datasets["test"] = datasets["test"].map(
+                label_y, num_parallel_calls=num_parallel_calls
+            )
+            datasets["report"] = datasets["report"].map(
                 label_y, num_parallel_calls=num_parallel_calls
             )
 
@@ -546,44 +460,46 @@ def main(
 
     # Train the model, doing validation at the end of each epoch
     _ = model.fit(
-        dataset_train,
+        datasets["train"],
         batch_size=batch_size,
         epochs=n_epochs,
         steps_per_epoch=steps_per_epoch,
-        validation_data=dataset_validate,
+        validation_data=datasets["validate"],
         validation_steps=validation_steps,
         callbacks=callbacks,
     )
 
     model.save(SAVED_MODEL_DIR)
-    model.evaluate(dataset_test, steps=test_steps)
+    model.evaluate(datasets["test"])
 
     fs.put(LOCAL_MODEL_CHECKPOINT_DIR, MODEL_CHECKPOINT_DIR, recursive=True)
     fs.put(LOCAL_CSV_LOGGER_FILEPATH, CSV_LOGGER_FILEPATH)
 
     print("Predicting the report set.")
-    y_hat_test = model.predict(dataset_test, steps=test_steps)
-    y_test = np.concatenate([y.numpy() for _, y in dataset_test])
-    df_report = pd.DataFrame(
+    y_hat_test = model.predict(datasets["test"])
+    y_test = np.concatenate([y.numpy() for _, y in datasets["test"]])
+    df_test = pd.DataFrame(
         dict(
-            subject_id=datasets["subjects"]["test"],
             y_true=np.squeeze(y_test),
             y_prob=np.squeeze(y_hat_test),
-        )
+        ),
+        index=split_dataframes["test"].index,
     )
-    df_report.to_csv(op.join(LOCAL_PREDICTION_OUTPUT_DIR, "test_set.csv"))
+    df_test.to_csv(op.join(LOCAL_PREDICTION_OUTPUT_DIR, f"test_set_{dataset_seed}.csv"))
 
     print("Predicting the report set.")
-    y_hat_report = model.predict(dataset_report, steps=report_steps)
-    y_report = np.concatenate([y.numpy() for _, y in dataset_report])
+    y_hat_report = model.predict(datasets["report"])
+    y_report = np.concatenate([y.numpy() for _, y in datasets["report"]])
     df_report = pd.DataFrame(
         dict(
-            subject_id=datasets["subjects"]["report"],
             y_true=np.squeeze(y_report),
             y_prob=np.squeeze(y_hat_report),
-        )
+        ),
+        index=split_dataframes["report"].index,
     )
-    df_report.to_csv(op.join(LOCAL_PREDICTION_OUTPUT_DIR, "report_set.csv"))
+    df_report.to_csv(
+        op.join(LOCAL_PREDICTION_OUTPUT_DIR, f"report_set_{dataset_seed}.csv")
+    )
     fs.put(LOCAL_PREDICTION_OUTPUT_DIR, PREDICTIONS_DIR, recursive=True)
 
 

@@ -8,6 +8,7 @@ COPY expert_qc.py /usr/local/bin/expert_qc.py
 RUN chmod +x /usr/local/bin/expert_qc.py 
 
 ENV OUTDATED_IGNORE 1
+LABEL org.opencontainers.image.authors="richiehalford@gmail.com"
 
 ENTRYPOINT ["expert_qc.py"]
 CMD ["/input", "/derived-data", "/figures"]

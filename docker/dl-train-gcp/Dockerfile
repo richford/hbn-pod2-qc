@@ -20,4 +20,6 @@ EXPOSE 9005
 COPY launch-cloud-train.sh /usr/local/bin/launch-cloud-train.sh
 RUN chmod +x /usr/local/bin/launch-cloud-train.sh
 
+LABEL org.opencontainers.image.authors="richiehalford@gmail.com"
+
 ENTRYPOINT ["launch-cloud-train.sh"]

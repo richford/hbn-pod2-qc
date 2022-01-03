@@ -20,11 +20,11 @@ echo Using TPU service accounts ${SVC_ACCOUNT} and ${TPU_SERVICE_ACCOUNT}
 MIN_SEED=0
 MAX_SEED=0
 for seed in $(seq ${MIN_SEED} ${MAX_SEED}); do
-    gcloud ai-platform jobs submit training ${JOB_NAME}_train-RUCUNY_test-CBIC_${seed} \
+    gcloud ai-platform jobs submit training ${JOB_NAME}_train_RUCUNY_test_CBIC_${seed} \
         --staging-bucket=gs://${BUCKET_NAME} \
         --package-path=trainsitemodel \
         --module-name=trainsitemodel.train_tensorfa \
-        --runtime-version=2.4 \
+        --runtime-version=2.5 \
         --python-version=3.7 \
         --config=../config.yaml \
         --region=us-central1 \
@@ -40,9 +40,9 @@ for seed in $(seq ${MIN_SEED} ${MAX_SEED}); do
         --dataset_name=b0-tensorfa-dwiqc \
         --dataset_seed=${seed} \
         --model_loss=binary_crossentropy \
-        --no-compute-volume-numbers
+        --compute-volume-numbers
 
-    # gcloud ai-platform jobs submit training ${JOB_NAME}_train-RU_test-CUNYCBIC_${seed} \
+    # gcloud ai-platform jobs submit training ${JOB_NAME}_train_RU_test_CUNYCBIC_${seed} \
     #     --staging-bucket=gs://${BUCKET_NAME} \
     #     --package-path=trainsitemodel \
     #     --module-name=trainsitemodel.train_tensorfa \
@@ -64,7 +64,7 @@ for seed in $(seq ${MIN_SEED} ${MAX_SEED}); do
     #     --model_loss=binary_crossentropy \
     #     --no-compute-volume-numbers
 
-    # gcloud ai-platform jobs submit training ${JOB_NAME}_train-CBIC_test-RUCUNY_${seed} \
+    # gcloud ai-platform jobs submit training ${JOB_NAME}_train_CBIC_test_RUCUNY_${seed} \
     #     --staging-bucket=gs://${BUCKET_NAME} \
     #     --package-path=trainsitemodel \
     #     --module-name=trainsitemodel.train_tensorfa \
@@ -86,7 +86,7 @@ for seed in $(seq ${MIN_SEED} ${MAX_SEED}); do
     #     --model_loss=binary_crossentropy \
     #     --no-compute-volume-numbers
 
-    # gcloud ai-platform jobs submit training ${JOB_NAME}_train-CBICCUNY_test-RU_${seed} \
+    # gcloud ai-platform jobs submit training ${JOB_NAME}_train_CBICCUNY_test_RU_${seed} \
     #     --staging-bucket=gs://${BUCKET_NAME} \
     #     --package-path=trainsitemodel \
     #     --module-name=trainsitemodel.train_tensorfa \
@@ -107,8 +107,4 @@ for seed in $(seq ${MIN_SEED} ${MAX_SEED}); do
     #     --dataset_seed=${seed} \
     #     --model_loss=binary_crossentropy \
     #     --no-compute-volume-numbers
-done
-
-for seed in $(seq ${MIN_SEED} ${MAX_SEED}); do
-    gcloud ai-platform jobs describe ${JOB_NAME}_seed${seed}
 done

@@ -11,3 +11,5 @@ RUN apk add -U --repository http://dl-3.alpinelinux.org/alpine/edge/testing \
     texlive-full
 COPY tex.mplstyle /tex.mplstyle
 COPY plot-formatting.py /usr/local/bin/plot_formatting.py
+
+LABEL org.opencontainers.image.authors="richiehalford@gmail.com"

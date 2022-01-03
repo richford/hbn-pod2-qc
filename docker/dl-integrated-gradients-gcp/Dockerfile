@@ -20,4 +20,6 @@ EXPOSE 9005
 COPY launch-integrated-gradients.sh /usr/local/bin/launch-integrated-gradients.sh
 RUN chmod +x /usr/local/bin/launch-integrated-gradients.sh
 
+LABEL org.opencontainers.image.authors="richiehalford@gmail.com"
+
 ENTRYPOINT ["launch-integrated-gradients.sh"]

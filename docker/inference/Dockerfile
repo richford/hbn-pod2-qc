@@ -9,6 +9,7 @@ COPY inference.py /usr/local/bin/inference.py
 RUN chmod +x /usr/local/bin/inference.py 
 
 ENV OUTDATED_IGNORE 1
+LABEL org.opencontainers.image.authors="richiehalford@gmail.com"
 
 ENTRYPOINT ["inference.py"]
 CMD ["/inference", "/figures"]

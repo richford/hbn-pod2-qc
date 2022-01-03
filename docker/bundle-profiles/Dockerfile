@@ -10,6 +10,7 @@ COPY bundle-profiles.py /usr/local/bin/bundle-profiles.py
 RUN chmod +x /usr/local/bin/bundle-profiles.py 
 
 ENV OUTDATED_IGNORE 1
+LABEL org.opencontainers.image.authors="richiehalford@gmail.com"
 
 ENTRYPOINT ["bundle-profiles.py"]
 CMD ["/figures"]
