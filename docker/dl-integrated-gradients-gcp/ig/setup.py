@@ -11,7 +11,7 @@ setup(
         "s3fs",
         "nilearn",
         "nibabel",
-        "nobrainer @ git+https://github.com/neuronets/nobrainer.git",
+        "nobrainer==0.2.1",
         "numpy",
         "pandas",
         "tensorflow",
