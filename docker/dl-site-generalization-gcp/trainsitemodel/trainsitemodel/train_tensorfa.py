@@ -154,9 +154,7 @@ def main(
         )
 
     # Setting location were training logs and checkpoints will be stored
-    GCS_BASE_PATH = (
-        f"gs://{gcs_bucket}/site_generalization_jobs/{job_name}/seed_{dataset_seed}"
-    )
+    GCS_BASE_PATH = f"gs://{gcs_bucket}/site_generalization_jobs/{job_name}/train_{'_'.join(train_sites)}_test_{'_'.join(test_sites)}/seed_{dataset_seed}"
     TENSORBOARD_LOGS_DIR = op.join(GCS_BASE_PATH, "logs")
     MODEL_CHECKPOINT_DIR = op.join(GCS_BASE_PATH, "checkpoints")
     CSV_LOGGER_FILEPATH = op.join(
@@ -186,106 +184,96 @@ def main(
 
     if use_tpu:
         device_nifti_dir = GCS_NIFTI_DIR
-        device_tfrec_dir = GCS_TFREC_DIR
+        train_tfrec_dir = op.join(
+            GCS_TFREC_DIR, "_".join(train_sites), f"seed-{dataset_seed}"
+        )
+        test_tfrec_dir = op.join(GCS_TFREC_DIR, "_".join(test_sites))
     else:
-        LOCAL_NIFTI_DIR = op.join(".", "nifti")
-        LOCAL_TFREC_DIR = op.join(".", "tfrecs")
-        os.makedirs(LOCAL_NIFTI_DIR, exist_ok=True)
-        os.makedirs(LOCAL_TFREC_DIR, exist_ok=True)
-        fs.get(GCS_NIFTI_DIR, LOCAL_NIFTI_DIR, recursive=True)
-        fs.get(GCS_TFREC_DIR, LOCAL_TFREC_DIR, recursive=True)
-        device_nifti_dir = LOCAL_NIFTI_DIR
-        device_tfrec_dir = LOCAL_TFREC_DIR
-
-    train_validate_tfrec_dir = op.join(
-        device_tfrec_dir,
-        "_".join(train_sites),
-        f"seed-{dataset_seed}",
-    )
-
-    test_report_tfrec_dir = op.join(
-        device_tfrec_dir,
-        "_".join(test_sites),
-    )
+        device_nifti_dir = op.join(".", "nifti")
+        device_tfrec_dir = op.join(".", "tfrecs")
+        train_tfrec_dir = op.join(
+            device_tfrec_dir, "_".join(train_sites), f"seed-{dataset_seed}"
+        )
+        test_tfrec_dir = op.join(device_tfrec_dir, "_".join(test_sites))
+        os.makedirs(device_nifti_dir, exist_ok=True)
+        os.makedirs(train_tfrec_dir, exist_ok=True)
+        os.makedirs(test_tfrec_dir, exist_ok=True)
+        fs.get(GCS_NIFTI_DIR, device_nifti_dir, recursive=True)
+        fs.get(
+            "/".join([GCS_TFREC_DIR, "_".join(train_sites), f"seed-{dataset_seed}"]),
+            train_tfrec_dir,
+            recursive=True,
+        )
+        gcs_test_dir = "/".join([GCS_TFREC_DIR, "_".join(test_sites)])
+        test_files = fs.glob("/".join([gcs_test_dir, "data-*.tfrec"]))
+        for fname in test_files:
+            fs.get(fname, op.join(test_tfrec_dir, op.basename(fname)))
 
     n_classes = 1
-    batch_size = 16
     volume_shape = (128, 128, 128, n_channels)
     block_shape = (128, 128, 128, n_channels)
     num_parallel_calls = 4
 
-    s3_participants = pd.read_csv(
-        "s3://fcp-indi/data/Projects/HBN/BIDS_curated/derivatives/qsiprep/participants.tsv",
-        sep="\t",
-        usecols=["subject_id", "scan_site_id", "expert_qc_score", "xgb_qc_score"],
-        index_col="subject_id",
+    train_volumes = pd.read_csv(
+        op.join(train_tfrec_dir, "num_volumes.csv"), index_col="split"
+    )
+    test_volumes = pd.read_csv(
+        "/".join([gcs_test_dir, "seed-0", "num_volumes.csv"]), index_col="split"
+    )
+    train_subjects = pd.read_csv(
+        op.join(train_tfrec_dir, "train-subjects.csv"), index_col=0
+    )
+    validate_subjects = pd.read_csv(
+        op.join(train_tfrec_dir, "validate-subjects.csv"), index_col=0
+    )
+    test_subjects = pd.read_csv(op.join(gcs_test_dir, "test-subjects.csv"), index_col=0)
+    report_subjects = pd.read_csv(
+        op.join(gcs_test_dir, "report-subjects.csv"), index_col=0
     )
 
-    nifti_files = [
-        op.abspath(filename) for filename in glob(f"{device_nifti_dir}/*.nii.gz")
-    ]
-    nifti_files = [fn for fn in nifti_files if "irregularsize" not in fn]
-    sub_id_pattern = re.compile("sub-[a-zA-Z0-9]*")
-    subjects = [sub_id_pattern.search(s).group(0) for s in nifti_files]
+    test_size = test_volumes.loc["test"].to_numpy()[0]
+    report_size = test_volumes.loc["report"].to_numpy()[0]
+    train_size = train_volumes.loc["train"].to_numpy()[0]
+    validate_size = train_volumes.loc["validate"].to_numpy()[0]
 
-    participants = pd.DataFrame(data=nifti_files, index=subjects, columns=["features"])
-    participants = participants.merge(
-        s3_participants, left_index=True, right_index=True, how="left"
-    )
-    participants.dropna(subset=["xgb_qc_score"], inplace=True)
-    participants.rename(columns={"xgb_qc_score": "labels"}, inplace=True)
+    assert test_size == len(test_subjects)
+    assert report_size == len(report_subjects)
+    assert train_size == len(train_subjects)
+    assert validate_size == len(validate_subjects)
 
-    # Get site inclusion indices for both the report set and
-    # the remaining train/validate/test (tvt) sets
-    # Take out the report set by checking for existence of expert QC scores
-    split_dataframes = {
-        "report": participants.loc[
-            np.logical_and(
-                participants["scan_site_id"].isin(test_sites),
-                ~participants["expert_qc_score"].isna(),
-            )
-        ],
-        "test": participants.loc[
-            np.logical_and(
-                participants["scan_site_id"].isin(test_sites),
-                participants["expert_qc_score"].isna(),
-            )
-        ],
-    }
+    # Set the batch size to divisors of the test and report datasets
+    batch_sizes = {}
+    for split, _size in zip(
+        ["test", "report"],
+        [test_size, report_size],
+    ):
+        for candidate_size in range(1, 32):
+            if _size % candidate_size == 0:
+                batch_sizes[split] = candidate_size
 
-    test_size = len(split_dataframes["test"])
-    report_size = len(split_dataframes["report"])
-    num_volumes = pd.read_csv(
-        op.join(train_validate_tfrec_dir, "num_volumes.csv"), index_col="split"
-    )
-
-    assert test_size == num_volumes.loc["test"].to_numpy()[0]
-    assert report_size == num_volumes.loc["report"].to_numpy()[0]
-    train_size = num_volumes.loc["train"].to_numpy()[0]
-    validate_size = num_volumes.loc["validate"].to_numpy()[0]
+    # For the train and validate datasets, it is not as important that the batch
+    # size divides the total number of subjects
+    batch_sizes["train"] = 16
+    batch_sizes["validate"] = 16
+    batch_sizes["test"] = 1
+    batch_sizes["report"] = 1
 
     train_sites_str = "data-" + "_".join(train_sites)
     test_sites_str = "data-" + "_".join(test_sites)
     split_patterns = {
-        "train": op.join(
-            train_validate_tfrec_dir, f"{train_sites_str}-train_shard*.tfrec"
-        ),
+        "train": op.join(train_tfrec_dir, f"{train_sites_str}-train_shard*.tfrec"),
         "validate": op.join(
-            train_validate_tfrec_dir, f"{train_sites_str}-validate_shard*.tfrec"
+            train_tfrec_dir, f"{train_sites_str}-validate_shard*.tfrec"
         ),
-        "test": op.join(
-            train_validate_tfrec_dir, f"{test_sites_str}-test_shard*.tfrec"
-        ),
-        "report": op.join(
-            train_validate_tfrec_dir, f"{test_sites_str}-report_shard*.tfrec"
-        ),
+        "test": op.join(test_tfrec_dir, f"{test_sites_str}-test_shard*.tfrec"),
+        "report": op.join(test_tfrec_dir, f"{test_sites_str}-report_shard*.tfrec"),
     }
 
     datasets = {
         split: nobrainer.dataset.get_dataset(
             file_pattern=file_pattern,
             n_classes=n_classes,
-            batch_size=batch_size,
+            batch_size=batch_sizes[split],
             volume_shape=volume_shape,
             scalar_label=True,
             # block_shape=block_shape,
@@ -296,52 +284,55 @@ def main(
         for split, file_pattern in split_patterns.items()
     }
 
+    n_train_volumes = train_size // batch_sizes["train"] * batch_sizes["train"]
+    n_validate_volumes = (
+        validate_size // batch_sizes["validate"] * batch_sizes["validate"]
+    )
+    n_test_volumes = test_size // batch_sizes["test"] * batch_sizes["test"]
+    n_report_volumes = report_size // batch_sizes["report"] * batch_sizes["report"]
+
     if compute_volume_numbers:
-        n_train_volumes = sum(len(y) for _, y in datasets["train"].as_numpy_iterator())
-        n_validate_volumes = sum(
-            len(y) for _, y in datasets["validate"].as_numpy_iterator()
-        )
+        print("Computing number of test volumes...")
         n_test_volumes = sum(len(y) for _, y in datasets["test"].as_numpy_iterator())
+        print("Computing number of report volumes...")
         n_report_volumes = sum(
             len(y) for _, y in datasets["report"].as_numpy_iterator()
         )
-    else:
-        n_train_volumes = train_size // batch_size * batch_size
-        n_validate_volumes = validate_size // batch_size * batch_size
-        n_test_volumes = test_size // batch_size * batch_size
-        n_report_volumes = report_size // batch_size * batch_size
 
     print("n_train_volumes: ", n_train_volumes)
     print("n_validate_volumes: ", n_validate_volumes)
     print("n_test_volumes: ", n_test_volumes)
     print("n_report_volumes: ", n_report_volumes)
 
+    for split, batch_size in batch_sizes.items():
+        print(f"{split} batch size: {batch_size}")
+
     steps_per_epoch = nobrainer.dataset.get_steps_per_epoch(
         n_volumes=n_train_volumes,
         volume_shape=volume_shape,
         block_shape=block_shape,
-        batch_size=batch_size,
+        batch_size=batch_sizes["train"],
     )
 
     validation_steps = nobrainer.dataset.get_steps_per_epoch(
         n_volumes=n_validate_volumes,
         volume_shape=volume_shape,
         block_shape=block_shape,
-        batch_size=batch_size,
+        batch_size=batch_sizes["validate"],
     )
 
     test_steps = nobrainer.dataset.get_steps_per_epoch(
         n_volumes=n_test_volumes,
         volume_shape=volume_shape,
         block_shape=block_shape,
-        batch_size=batch_size,
+        batch_size=batch_sizes["test"],
     )
 
     report_steps = nobrainer.dataset.get_steps_per_epoch(
         n_volumes=n_report_volumes,
         volume_shape=volume_shape,
         block_shape=block_shape,
-        batch_size=batch_size,
+        batch_size=batch_sizes["report"],
     )
 
     if use_tpu:
@@ -461,7 +452,7 @@ def main(
     # Train the model, doing validation at the end of each epoch
     _ = model.fit(
         datasets["train"],
-        batch_size=batch_size,
+        batch_size=batch_sizes["train"],
         epochs=n_epochs,
         steps_per_epoch=steps_per_epoch,
         validation_data=datasets["validate"],
@@ -470,37 +461,49 @@ def main(
     )
 
     model.save(SAVED_MODEL_DIR)
-    model.evaluate(datasets["test"])
 
     fs.put(LOCAL_MODEL_CHECKPOINT_DIR, MODEL_CHECKPOINT_DIR, recursive=True)
     fs.put(LOCAL_CSV_LOGGER_FILEPATH, CSV_LOGGER_FILEPATH)
 
     print("Predicting the report set.")
-    y_hat_test = model.predict(datasets["test"])
-    y_test = np.concatenate([y.numpy() for _, y in datasets["test"]])
-    df_test = pd.DataFrame(
-        dict(
-            y_true=np.squeeze(y_test),
-            y_prob=np.squeeze(y_hat_test),
-        ),
-        index=split_dataframes["test"].index,
-    )
-    df_test.to_csv(op.join(LOCAL_PREDICTION_OUTPUT_DIR, f"test_set_{dataset_seed}.csv"))
-
-    print("Predicting the report set.")
-    y_hat_report = model.predict(datasets["report"])
+    y_hat_report = model.predict(datasets["report"], steps=report_steps)
     y_report = np.concatenate([y.numpy() for _, y in datasets["report"]])
     df_report = pd.DataFrame(
         dict(
             y_true=np.squeeze(y_report),
             y_prob=np.squeeze(y_hat_report),
         ),
-        index=split_dataframes["report"].index,
+        index=report_subjects.index,
     )
+    df_report["y_from_tsv"] = report_subjects["labels"]
+    df_report["train_sites"] = " + ".join(train_sites)
+    df_report["test_sites"] = " + ".join(test_sites)
+    df_report["seed"] = dataset_seed
     df_report.to_csv(
         op.join(LOCAL_PREDICTION_OUTPUT_DIR, f"report_set_{dataset_seed}.csv")
     )
+
     fs.put(LOCAL_PREDICTION_OUTPUT_DIR, PREDICTIONS_DIR, recursive=True)
+
+    print("Predicting the test set.")
+    y_hat_test = model.predict(datasets["test"], steps=test_steps)
+    y_test = np.concatenate([y.numpy() for _, y in datasets["test"]])
+    df_test = pd.DataFrame(
+        dict(
+            y_true=np.squeeze(y_test),
+            y_prob=np.squeeze(y_hat_test),
+        ),
+        index=test_subjects.index,
+    )
+    df_test["y_from_tsv"] = test_subjects["labels"]
+    df_test["train_sites"] = " + ".join(train_sites)
+    df_test["test_sites"] = " + ".join(test_sites)
+    df_test["seed"] = dataset_seed
+    df_test.to_csv(op.join(LOCAL_PREDICTION_OUTPUT_DIR, f"test_set_{dataset_seed}.csv"))
+
+    fs.put(LOCAL_PREDICTION_OUTPUT_DIR, PREDICTIONS_DIR, recursive=True)
+
+    model.evaluate(datasets["test"], steps=test_steps)
 
 
 if __name__ == "__main__":

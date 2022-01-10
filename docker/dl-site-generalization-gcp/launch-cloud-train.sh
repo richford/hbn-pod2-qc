@@ -18,7 +18,7 @@ echo Using project $(gcloud config get-value project)
 echo Using TPU service accounts ${SVC_ACCOUNT} and ${TPU_SERVICE_ACCOUNT}
 
 MIN_SEED=0
-MAX_SEED=0
+MAX_SEED=7
 for seed in $(seq ${MIN_SEED} ${MAX_SEED}); do
     gcloud ai-platform jobs submit training ${JOB_NAME}_train_RUCUNY_test_CBIC_${seed} \
         --staging-bucket=gs://${BUCKET_NAME} \
@@ -40,71 +40,71 @@ for seed in $(seq ${MIN_SEED} ${MAX_SEED}); do
         --dataset_name=b0-tensorfa-dwiqc \
         --dataset_seed=${seed} \
         --model_loss=binary_crossentropy \
+        --no-compute-volume-numbers
+
+    gcloud ai-platform jobs submit training ${JOB_NAME}_train_RU_test_CBICCUNY_${seed} \
+        --staging-bucket=gs://${BUCKET_NAME} \
+        --package-path=trainsitemodel \
+        --module-name=trainsitemodel.train_tensorfa \
+        --runtime-version=2.4 \
+        --python-version=3.7 \
+        --config=../config.yaml \
+        --region=us-central1 \
+        --project ${PROJECT_ID} \
+        -- \
+        --gcs_bucket=${BUCKET_NAME} \
+        --job_name=${JOB_NAME} \
+        --train_site RU \
+        --test_site CBIC \
+        --test_site CUNY \
+        --n_epochs=100 \
+        --n_channels=5 \
+        --dataset_name=b0-tensorfa-dwiqc \
+        --dataset_seed=${seed} \
+        --model_loss=binary_crossentropy \
         --compute-volume-numbers
 
-    # gcloud ai-platform jobs submit training ${JOB_NAME}_train_RU_test_CUNYCBIC_${seed} \
-    #     --staging-bucket=gs://${BUCKET_NAME} \
-    #     --package-path=trainsitemodel \
-    #     --module-name=trainsitemodel.train_tensorfa \
-    #     --runtime-version=2.4 \
-    #     --python-version=3.7 \
-    #     --config=../config.yaml \
-    #     --region=us-central1 \
-    #     --project ${PROJECT_ID} \
-    #     -- \
-    #     --gcs_bucket=${BUCKET_NAME} \
-    #     --job_name=${JOB_NAME} \
-    #     --train_site RU \
-    #     --test_site CUNY \
-    #     --test_site CBIC \
-    #     --n_epochs=100 \
-    #     --n_channels=5 \
-    #     --dataset_name=b0-tensorfa-dwiqc \
-    #     --dataset_seed=${seed} \
-    #     --model_loss=binary_crossentropy \
-    #     --no-compute-volume-numbers
+    gcloud ai-platform jobs submit training ${JOB_NAME}_train_CBIC_test_RUCUNY_${seed} \
+        --staging-bucket=gs://${BUCKET_NAME} \
+        --package-path=trainsitemodel \
+        --module-name=trainsitemodel.train_tensorfa \
+        --runtime-version=2.4 \
+        --python-version=3.7 \
+        --config=../config.yaml \
+        --region=us-central1 \
+        --project ${PROJECT_ID} \
+        -- \
+        --gcs_bucket=${BUCKET_NAME} \
+        --job_name=${JOB_NAME} \
+        --train_site CBIC \
+        --test_site RU \
+        --test_site CUNY \
+        --n_epochs=100 \
+        --n_channels=5 \
+        --dataset_name=b0-tensorfa-dwiqc \
+        --dataset_seed=${seed} \
+        --model_loss=binary_crossentropy \
+        --no-compute-volume-numbers
 
-    # gcloud ai-platform jobs submit training ${JOB_NAME}_train_CBIC_test_RUCUNY_${seed} \
-    #     --staging-bucket=gs://${BUCKET_NAME} \
-    #     --package-path=trainsitemodel \
-    #     --module-name=trainsitemodel.train_tensorfa \
-    #     --runtime-version=2.4 \
-    #     --python-version=3.7 \
-    #     --config=../config.yaml \
-    #     --region=us-central1 \
-    #     --project ${PROJECT_ID} \
-    #     -- \
-    #     --gcs_bucket=${BUCKET_NAME} \
-    #     --job_name=${JOB_NAME} \
-    #     --train_site CBIC \
-    #     --test_site RU \
-    #     --test_site CUNY \
-    #     --n_epochs=100 \
-    #     --n_channels=5 \
-    #     --dataset_name=b0-tensorfa-dwiqc \
-    #     --dataset_seed=${seed} \
-    #     --model_loss=binary_crossentropy \
-    #     --no-compute-volume-numbers
-
-    # gcloud ai-platform jobs submit training ${JOB_NAME}_train_CBICCUNY_test_RU_${seed} \
-    #     --staging-bucket=gs://${BUCKET_NAME} \
-    #     --package-path=trainsitemodel \
-    #     --module-name=trainsitemodel.train_tensorfa \
-    #     --runtime-version=2.4 \
-    #     --python-version=3.7 \
-    #     --config=../config.yaml \
-    #     --region=us-central1 \
-    #     --project ${PROJECT_ID} \
-    #     -- \
-    #     --gcs_bucket=${BUCKET_NAME} \
-    #     --job_name=${JOB_NAME} \
-    #     --train_site CBIC \
-    #     --train_site CUNY \
-    #     --test_site RU \
-    #     --n_epochs=100 \
-    #     --n_channels=5 \
-    #     --dataset_name=b0-tensorfa-dwiqc \
-    #     --dataset_seed=${seed} \
-    #     --model_loss=binary_crossentropy \
-    #     --no-compute-volume-numbers
+    gcloud ai-platform jobs submit training ${JOB_NAME}_train_CBICCUNY_test_RU_${seed} \
+        --staging-bucket=gs://${BUCKET_NAME} \
+        --package-path=trainsitemodel \
+        --module-name=trainsitemodel.train_tensorfa \
+        --runtime-version=2.4 \
+        --python-version=3.7 \
+        --config=../config.yaml \
+        --region=us-central1 \
+        --project ${PROJECT_ID} \
+        -- \
+        --gcs_bucket=${BUCKET_NAME} \
+        --job_name=${JOB_NAME} \
+        --train_site CBIC \
+        --train_site CUNY \
+        --test_site RU \
+        --n_epochs=100 \
+        --n_channels=5 \
+        --dataset_name=b0-tensorfa-dwiqc \
+        --dataset_seed=${seed} \
+        --model_loss=binary_crossentropy \
+        --no-compute-volume-numbers
 done
