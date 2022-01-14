@@ -7,6 +7,7 @@ import nibabel as nib
 import numpy as np
 import os
 import os.path as op
+import pandas as pd
 import plotly.graph_objects as go
 import seaborn as sns
 import warnings
@@ -18,7 +19,7 @@ with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=FutureWarning)
     from nilearn import plotting
 
-from sklearn.metrics import auc
+from sklearn.metrics import accuracy_score, auc, balanced_accuracy_score
 from sklearn.metrics import roc_curve, roc_auc_score
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -511,6 +512,87 @@ def save_attribution_maps(nifti_dir, out_dir):
         )
 
 
+def visualize_site_generalization(output_dir):
+    participants = pd.read_csv(
+        "s3://fcp-indi/data/Projects/HBN/BIDS_curated/derivatives/qsiprep/participants.tsv",
+        sep="\t",
+    )
+    participants["XGB pass?"] = participants["xgb_qc_score"] >= 0.5
+    participants["Expert pass?"] = participants["expert_qc_score"] >= 0.5
+    participants.rename(
+        columns={
+            "xgb_qc_score": "XGB rating",
+            "expert_qc_score": "Expert rating",
+            "dl_qc_score": "CNN-i rating",
+            "scan_site_id": "Site",
+        },
+        inplace=True,
+    )
+
+    width, height = set_size(width=0.25 * TEXT_WIDTH)
+    fig, axes = plt.subplots(3, 1, figsize=(width, height * 0.8), sharex=True)
+    fig, ax = plt.subplots(1, 1, figsize=(8, 5))
+    _ = sns.kdeplot(
+        data=participants,
+        x="XGB rating",
+        y="CNN-i rating",
+        hue="XGB pass?",
+        cut=0.25,
+        ax=ax,
+    )
+    sns.move_legend(ax, "lower right")
+
+    fig, axes = plt.subplots(2, 3, figsize=(16, 10))
+    ratings = ["Expert rating", "XGB rating", "CNN-i rating"]
+    hist_df = participants.drop(
+        columns=[
+            "sex",
+            "age",
+            "ehq_total",
+            "commercial_use",
+            "full_pheno",
+            "xgb_qsiprep_qc_score",
+            "XGB pass?",
+            "Expert pass?",
+        ]
+    )
+    hist_df = hist_df[hist_df["Site"] != "SI"].copy()
+    hist_melt = hist_df.melt(
+        id_vars=["subject_id", "Site"], var_name="type", value_name="rating"
+    )
+    bins = 12
+
+    for x, ax in zip(ratings, axes[0]):
+        _ = sns.histplot(
+            data=hist_df,
+            x=x,
+            hue="Site",
+            element="step",
+            stat="probability",
+            fill=False,
+            common_norm=False,
+            ax=ax,
+            lw=2,
+            bins=bins,
+        )
+
+    for site, ax in zip(["RU", "CBIC", "CUNY"], axes[1]):
+        _ = sns.histplot(
+            data=hist_melt[hist_melt["Site"] == site],
+            x="rating",
+            hue="type",
+            element="step",
+            stat="probability",
+            fill=False,
+            common_norm=False,
+            ax=ax,
+            lw=2,
+            bins=bins,
+        )
+
+        ax.set_title(site)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -544,15 +626,17 @@ if __name__ == "__main__":
     # )
 
     with plt.style.context("/tex.mplstyle"):
-        visualize_loss_curves(
-            log_dir=args.training_log_dir,
-            output_dir=dl_fig_dir,
-        )
+        # visualize_loss_curves(
+        #     log_dir=args.training_log_dir,
+        #     output_dir=dl_fig_dir,
+        # )
 
-        visualize_auc_curves(
-            report_set_dir=args.report_set_dir,
-            output_dir=dl_fig_dir,
-        )
+        # visualize_auc_curves(
+        #     report_set_dir=args.report_set_dir,
+        #     output_dir=dl_fig_dir,
+        # )
+
+        visualize_site_generalization(output_dir=dl_fig_dir)
 
     # save_hbn_pod2_sankey(args.fig_dir)
 

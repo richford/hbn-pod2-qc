@@ -1,0 +1,22 @@
+{
+    "creators": [
+        {
+            "affiliation": "The University of Washington, eScience Institute",
+            "name": "Richie-Halford, Adam",
+            "orcid": "0000-0001-9276-9084"
+        },
+        {
+            "affiliation": "The University of Washington, Department of Psychology",
+            "name": "Rokem, Ariel",
+            "orcid": "0000-0003-0679-1985"
+        }
+    ],
+    "license": "BSD-3-Clause",
+    "title": "HBN-POD2-QC: Code accompanying the HBN-POD2 manuscript",
+    "keywords": [
+        "neuroimaging",
+        "dMRI",
+        "quality control"
+    ],
+    "upload_type": "software"
+}

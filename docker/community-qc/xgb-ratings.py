@@ -71,6 +71,7 @@ def _get_Xy(expert_rating_file, fibr_dir, image_type=None):
     df_qc = pd.DataFrame(qc_json["subjects"])
     df_qc["subject_id"] = df_qc["subject_id"].apply(lambda s: s.replace("sub-", ""))
     df_qc.set_index("subject_id", drop=True, inplace=True)
+    df_qc.to_csv(op.join(fibr_dir, "dwiqc.csv"))
     df_qc.drop(
         [
             "participant_id",
@@ -246,7 +247,9 @@ def xgb_qc(
     cv = RepeatedStratifiedKFold(n_splits=3, n_repeats=2, random_state=random_state)
 
     checkpointed = {}
+    qc_checkpointed = {}
     shap_values = []
+    qc_shap_values = []
     mean_fpr = np.linspace(0, 1, 100)
 
     models, qc_models, fibr_models = {}, {}, {}
@@ -302,7 +305,10 @@ def xgb_qc(
                     xgb_model_dir, f"{qc_model_name}_seed-{random_state}_cv-{i}.json"
                 )
             )
+            qc_checkpointed[i] = True
             qc_models[i] = xgb
+            explainer = shap.Explainer(xgb, feature_names=df_qc.columns)
+            qc_shap_values.append(explainer(Xqc[test]))
         except XGBoostError:
             qc_models[i] = BayesSearchCV(
                 XGBClassifier(
@@ -319,6 +325,11 @@ def xgb_qc(
                     xgb_model_dir, f"{qc_model_name}_seed-{random_state}_cv-{i}.json"
                 )
             )
+            qc_checkpointed[i] = False
+            explainer = shap.Explainer(
+                qc_models[i].best_estimator_, feature_names=df_qc.columns
+            )
+            qc_shap_values.append(explainer(Xqc[test]))
 
         try:
             xgb = XGBClassifier()
@@ -421,10 +432,12 @@ def xgb_qc(
 
     plot_title = "xgb-roc-curve"
     shap_csv_title = "xgb_shap_values"
+    shap_q_csv_title = "xgb_q_shap_values"
     qc_csv_title = "qc_ratings"
     if image_type is not None:
         plot_title += "-" + image_type
         shap_csv_title += "_" + image_type
+        shap_q_csv_title += "_" + image_type
         qc_csv_title += "_" + image_type
 
     fig.savefig(op.join(fig_dir, f"{plot_title}.pdf"), bbox_inches="tight")
@@ -439,6 +452,19 @@ def xgb_qc(
     absmean_shap.index.rename("feature", inplace=True)
     absmean_shap.sort_values(ascending=False, inplace=True)
     absmean_shap.to_csv(op.join(output_dir, f"{shap_csv_title}.csv"))
+    absmean_shap.to_latex(op.join(output_dir, f"{shap_csv_title}.tex"))
+
+    absmean_shap = pd.Series(
+        index=df_qc.columns,
+        data=np.absolute(np.concatenate([sh.values for sh in qc_shap_values])).mean(
+            axis=0
+        ),
+        name="mean-absolute-shap-value",
+    )
+    absmean_shap.index.rename("feature", inplace=True)
+    absmean_shap.sort_values(ascending=False, inplace=True)
+    absmean_shap.to_csv(op.join(output_dir, f"{shap_q_csv_title}.csv"))
+    absmean_shap.to_latex(op.join(output_dir, f"{shap_q_csv_title}.tex"))
 
     # Create a voting classifier from each CV's XGBoost classifier.
     # Weight each classifier by its out-of-sample ROC AUC
@@ -447,13 +473,26 @@ def xgb_qc(
         for i in range(6)
     }
 
+    qc_estimators = {
+        f"cv{i}": qc_models[i] if qc_checkpointed[i] else qc_models[i].best_estimator_
+        for i in range(6)
+    }
+
     weights = aucs
+    qc_weights = qc_aucs
     voter = VotingClassifier(estimators=estimators, weights=weights, voting="soft")
+    qc_voter = VotingClassifier(
+        estimators=qc_estimators, weights=qc_weights, voting="soft"
+    )
 
     # We don't want to refit so manually set the fitted estimators
     voter.estimators_ = list(estimators.values())
     voter.le_ = LabelEncoder().fit(y)
     voter.classes_ = voter.le_.classes_
+
+    qc_voter.estimators_ = list(qc_estimators.values())
+    qc_voter.le_ = LabelEncoder().fit(y)
+    qc_voter.classes_ = qc_voter.le_.classes_
 
     # Now create qc ratings for all subjects, not just the ones in the gold
     # standard dataset.
@@ -466,7 +505,17 @@ def xgb_qc(
     y_all_subjects = voter.predict_proba(X_all_subjects)[:, 1]
     qc_ratings = pd.DataFrame(index=X_all_subjects.index)
     qc_ratings["fibr + qsiprep rating"] = y_all_subjects
+
+    df_qc.to_csv(op.join(output_dir, "dwiqc.csv"))
+    qsiprep_all_subjects = qc_voter.predict_proba(df_qc)[:, 1]
+    qsiprep_ratings = pd.DataFrame(index=df_qc.index)
+    qsiprep_ratings["qsiprep rating"] = qsiprep_all_subjects
+
+    qc_ratings = qsiprep_ratings.merge(
+        qc_ratings, how="left", left_index=True, right_index=True
+    )
     qc_ratings.to_csv(op.join(output_dir, f"{qc_csv_title}.csv"))
+    print(qc_weights)
 
     _save_participants_tsv(qc_ratings, output_dir, image_type=image_type)
 
@@ -489,7 +538,7 @@ def compute_irr_with_xgb_rater(expert_qc_dir, fibr_deriv_dir, fig_dir):
 
     fibr = pd.read_csv(op.join(fibr_deriv_dir, "participants.tsv"), sep="\t")
     fibr["subject_id"] = fibr["subject_id"] + "_ses-HBNsite" + fibr["scan_site_id"]
-    fibr.drop(columns="scan_site_id", inplace=True)
+    fibr.drop(columns=["scan_site_id", "qsiprep rating"], inplace=True)
     fibr.dropna(inplace=True)
     fibr.columns = ["subject", "rating"]
     fibr["rating"] = np.rint((fibr["rating"] * 4 - 2).to_numpy()).astype(int)
@@ -597,7 +646,7 @@ def plot_xgb_scatter(expert_rating_file, output_dir, fibr_dir, fig_dir):
             right_index=True,
         )
     )
-    xgb_qc = pd.read_csv(op.join(output_dir, "qc_ratings.csv"), index_col="Unnamed: 0")
+    xgb_qc = pd.read_csv(op.join(output_dir, "qc_ratings.csv"), index_col="subject_id")
     merged = pd.merge(
         pd.merge(y[["rating"]], xgb_qc, how="left", left_index=True, right_index=True),
         pd.DataFrame(

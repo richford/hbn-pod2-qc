@@ -7,19 +7,15 @@ services:
     volumes:
       - ./data/:/home/8cy32/
   nifti-download:
-    build:
-      context: docker/osf-download
-    image: hbn-pod2/osf-download
+    image: amazon/aws-cli
     volumes:
-      - ./data/:/home/8cy32/
-    command: /nifti_file_list.txt
+      - ./data/decfa/niftis:/aws
+    command: s3 sync --no-sign-request s3://fcp-indi/data/Projects/HBN/BIDS_curated/derivatives/qsiprep/derivatives/dlqc/nifti/ .
   tfrec-download:
-    build:
-      context: docker/osf-download
-    image: hbn-pod2/osf-download
+    image: amazon/aws-cli
     volumes:
-      - ./data/:/home/8cy32/
-    command: /tfrec_file_list.txt
+      - ./data/decfa/tfrecs:/aws
+    command: s3 sync --no-sign-request s3://fcp-indi/data/Projects/HBN/BIDS_curated/derivatives/qsiprep/derivatives/dlqc/tfrec/ .
   expert-qc:
     build:
       context: docker/expert-qc

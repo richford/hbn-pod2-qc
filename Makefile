@@ -25,12 +25,12 @@ data:
 
 # Download nifti files from OSF
 niftis:
-	@echo "Downloading NIfTI files from OSF"
+	@echo "Downloading NIfTI files from FCP-INDI"
 	@docker compose run nifti-download
 
 # Download tfrecs files from OSF
 tfrecs:
-	@echo "Downloading tfrecs from OSF"
+	@echo "Downloading tfrecs from FCP-INDI"
 	@docker compose run tfrec-download
 
 # Analyze expert ratings and generate derived figures
