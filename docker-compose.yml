@@ -4,15 +4,18 @@ services:
     build:
       context: docker/osf-download
     image: hbn-pod2/osf-download
+    platform: linux/amd64
     volumes:
       - ./data/:/home/8cy32/
   nifti-download:
     image: amazon/aws-cli
+    platform: linux/amd64
     volumes:
       - ./data/decfa/niftis:/aws
     command: s3 sync --no-sign-request s3://fcp-indi/data/Projects/HBN/BIDS_curated/derivatives/qsiprep/derivatives/dlqc/nifti/ .
   tfrec-download:
     image: amazon/aws-cli
+    platform: linux/amd64
     volumes:
       - ./data/decfa/tfrecs:/aws
     command: s3 sync --no-sign-request s3://fcp-indi/data/Projects/HBN/BIDS_curated/derivatives/qsiprep/derivatives/dlqc/tfrec/ .
@@ -20,6 +23,7 @@ services:
     build:
       context: docker/expert-qc
     image: hbn-pod2/expert-qc
+    platform: linux/amd64
     volumes:
       - ./data/osfstorage/expert-qc:/input
       - ./data/derived/expert-qc:/derived-data
@@ -28,6 +32,7 @@ services:
     build:
       context: docker/community-qc
     image: hbn-pod2/community-qc
+    platform: linux/amd64
     volumes:
       - ./data/derived/expert-qc:/input/expert-ratings
       - ./data/osfstorage/community-qc:/input/fibr-ratings
@@ -38,6 +43,7 @@ services:
     build:
       context: docker/dl-train-gcp
     image: hbn-pod2/dl-train-gcp
+    platform: linux/amd64
     volumes:
       - ${GOOGLE_APPLICATION_CREDENTIALS_DIR}:/home/google_application_credentials/
     environment:
@@ -54,6 +60,7 @@ services:
     build:
       context: docker/dl-predict-gcp
     image: hbn-pod2/dl-predict-gcp
+    platform: linux/amd64
     volumes:
       - ${GOOGLE_APPLICATION_CREDENTIALS_DIR}:/home/google_application_credentials/
     environment:
@@ -70,6 +77,7 @@ services:
     build:
       context: docker/dl-integrated-gradients-gcp
     image: hbn-pod2/dl-integrated-gradients-gcp
+    platform: linux/amd64
     volumes:
       - ${GOOGLE_APPLICATION_CREDENTIALS_DIR}:/home/google_application_credentials/
     environment:
@@ -86,6 +94,7 @@ services:
     build:
       context: docker/dl-site-generalization-gcp
     image: hbn-pod2/dl-site-generalization-gcp
+    platform: linux/amd64
     volumes:
       - ${GOOGLE_APPLICATION_CREDENTIALS_DIR}:/home/google_application_credentials/
     environment:
@@ -102,6 +111,7 @@ services:
     build:
       context: docker/dl-figures
     image: hbn-pod2/dl-figures
+    platform: linux/amd64
     volumes:
       - ./data/osfstorage/deep-learning-qc/saved-models/report-model:/input/saved-model
       - ./data/osfstorage/deep-learning-qc/training-logs:/input/training-logs
@@ -112,6 +122,7 @@ services:
     build:
       context: docker/bundle-profiles
     image: hbn-pod2/bundle-profiles
+    platform: linux/amd64
     volumes:
       - ./figures/bundle-profiles:/figures
       - $HOME/.aws:/root/.aws
@@ -119,7 +130,19 @@ services:
     build:
       context: docker/inference
     image: hbn-pod2/inference
+    platform: linux/amd64
     volumes:
       - ./figures/age-prediction:/figures
       - ./data/osfstorage/inference:/inference
       - $HOME/.aws:/root/.aws
+  site-generalization:
+    build:
+      context: docker/xgb-site-generalization
+    image: hbn-pod2/xgb-site-generalization
+    platform: linux/amd64
+    volumes:
+      - ./data/osfstorage/site-generalization/dl:/input/dl-predictions
+      - ./data/derived/expert-qc:/input/expert-ratings
+      - ./data/osfstorage/community-qc:/input/fibr-ratings
+      - ./data/osfstorage/site-generalization/xgb/saved-models:/input/saved-models
+      - ./figures/site-generalization:/figures

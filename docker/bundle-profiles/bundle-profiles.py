@@ -230,7 +230,11 @@ def plot_qsiprep_stats(fig_dir):
     df_qc = df_qc[
         ["raw_neighbor_corr", "raw_num_bad_slices", "max_rel_translation"]
     ].copy()
-    df_qc.columns = ["NDC", "Num outlier slices", "Max rel. translation"]
+    df_qc.columns = [
+        "Neighboring DWI correlation",
+        "Num outlier slices",
+        "Max rel. translation",
+    ]
     df_merged = df_qc.merge(participants, left_index=True, right_index=True)
 
     figsize = set_size(width=TEXT_WIDTH, subplots=(4, 4))
@@ -263,7 +267,11 @@ def plot_qsiprep_stats(fig_dir):
         borderpad=0.2,
     )
 
-    x_vars = ["NDC", "NDC", "Num outlier slices"]
+    x_vars = [
+        "Neighboring DWI correlation",
+        "Neighboring DWI correlation",
+        "Num outlier slices",
+    ]
     y_vars = ["Num outlier slices", "Max rel. translation", "Max rel. translation"]
 
     hue_order = categorical_order(df_merged["Age"])

@@ -17,6 +17,7 @@ import shap
 from glob import glob
 from plot_formatting import set_size, FULL_WIDTH, TEXT_WIDTH
 from scipy.stats import pearsonr
+from sklearn.calibration import calibration_curve
 from sklearn.ensemble import VotingClassifier
 from sklearn.metrics import auc
 from sklearn.metrics import roc_curve, roc_auc_score
@@ -249,7 +250,9 @@ def xgb_qc(
     checkpointed = {}
     qc_checkpointed = {}
     shap_values = []
+    f_values = []
     qc_shap_values = []
+    qc_f_values = []
     mean_fpr = np.linspace(0, 1, 100)
 
     models, qc_models, fibr_models = {}, {}, {}
@@ -278,6 +281,7 @@ def xgb_qc(
             models[i] = xgb
             explainer = shap.Explainer(xgb, feature_names=X_columns)
             shap_values.append(explainer(X[test]))
+            f_values.append(xgb.feature_importances_)
         except XGBoostError:
             models[i] = BayesSearchCV(
                 XGBClassifier(
@@ -297,6 +301,7 @@ def xgb_qc(
                 models[i].best_estimator_, feature_names=X_columns
             )
             shap_values.append(explainer(X[test]))
+            f_values.append(models[i].best_estimator_.feature_importances_)
 
         try:
             xgb = XGBClassifier()
@@ -309,6 +314,7 @@ def xgb_qc(
             qc_models[i] = xgb
             explainer = shap.Explainer(xgb, feature_names=df_qc.columns)
             qc_shap_values.append(explainer(Xqc[test]))
+            qc_f_values.append(xgb.feature_importances_)
         except XGBoostError:
             qc_models[i] = BayesSearchCV(
                 XGBClassifier(
@@ -330,6 +336,7 @@ def xgb_qc(
                 qc_models[i].best_estimator_, feature_names=df_qc.columns
             )
             qc_shap_values.append(explainer(Xqc[test]))
+            qc_f_values.append(models[i].best_estimator_.feature_importances_)
 
         try:
             xgb = XGBClassifier()
@@ -449,10 +456,11 @@ def xgb_qc(
         ),
         name="mean-absolute-shap-value",
     )
+    absmean_shap = absmean_shap.loc[absmean_shap.index.isin(df_qc.columns)]
     absmean_shap.index.rename("feature", inplace=True)
     absmean_shap.sort_values(ascending=False, inplace=True)
     absmean_shap.to_csv(op.join(output_dir, f"{shap_csv_title}.csv"))
-    absmean_shap.to_latex(op.join(output_dir, f"{shap_csv_title}.tex"))
+    absmean_shap.to_latex(op.join(output_dir, f"{shap_csv_title}.tex"), longtable=False)
 
     absmean_shap = pd.Series(
         index=df_qc.columns,
@@ -464,7 +472,9 @@ def xgb_qc(
     absmean_shap.index.rename("feature", inplace=True)
     absmean_shap.sort_values(ascending=False, inplace=True)
     absmean_shap.to_csv(op.join(output_dir, f"{shap_q_csv_title}.csv"))
-    absmean_shap.to_latex(op.join(output_dir, f"{shap_q_csv_title}.tex"))
+    absmean_shap.to_latex(
+        op.join(output_dir, f"{shap_q_csv_title}.tex"), longtable=False
+    )
 
     # Create a voting classifier from each CV's XGBoost classifier.
     # Weight each classifier by its out-of-sample ROC AUC
@@ -494,6 +504,25 @@ def xgb_qc(
     qc_voter.le_ = LabelEncoder().fit(y)
     qc_voter.classes_ = qc_voter.le_.classes_
 
+    fig, ax = plt.subplots(1, 1, figsize=set_size(width=0.5 * FULL_WIDTH))
+
+    ax.plot([0, 1], [0, 1], "k:", label="Perfectly calibrated")
+
+    for clf, label, _X in zip([voter, qc_voter], ["XGB", "XGB-q"], [X, Xqc]):
+        prob_true, prob_pred = calibration_curve(
+            y_true=y,
+            y_prob=clf.predict_proba(_X)[:, 1],
+            n_bins=5,
+        )
+        ax.plot(prob_pred, prob_true, "s-", label=label)
+
+    ax.set_title("Calibration curve (reliability diagram)")
+    ax.legend(loc="upper left", framealpha=1.0, title="Model")
+    ax.set_xlabel("Mean predicted probability")
+    ax.set_ylabel("Fraction of positives")
+
+    fig.savefig(op.join(fig_dir, "xgb-calibration-curve.pdf"), bbox_inches="tight")
+
     # Now create qc ratings for all subjects, not just the ones in the gold
     # standard dataset.
     X_all_subjects = fibr_votes.merge(
@@ -515,7 +544,7 @@ def xgb_qc(
         qc_ratings, how="left", left_index=True, right_index=True
     )
     qc_ratings.to_csv(op.join(output_dir, f"{qc_csv_title}.csv"))
-    print(qc_weights)
+    # print(qc_weights)
 
     _save_participants_tsv(qc_ratings, output_dir, image_type=image_type)
 
@@ -693,7 +722,7 @@ def plot_xgb_scatter(expert_rating_file, output_dir, fibr_dir, fig_dir):
     X_all.rename(
         columns={
             "rating": "Expert rating",
-            "raw_neighbor_corr": "NDC",
+            "raw_neighbor_corr": "Neighboring DWI correlation",
             "raw_num_bad_slices": "Num outlier slices",
             "max_rel_translation": "Max rel. translation",
         },
@@ -706,7 +735,8 @@ def plot_xgb_scatter(expert_rating_file, output_dir, fibr_dir, fig_dir):
     fig.tight_layout()
 
     for x_var, ax in zip(
-        ["NDC", "Num outlier slices", "Max rel. translation"], axes.flatten()[1:]
+        ["Neighboring DWI correlation", "Num outlier slices", "Max rel. translation"],
+        axes.flatten()[1:],
     ):
         _ = sns.scatterplot(data=X_all, x=x_var, y="Expert rating", s=14, ax=ax)
         r, _ = pearsonr(X_all[x_var], X_all["Expert rating"])

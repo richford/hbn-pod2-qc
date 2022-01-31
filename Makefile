@@ -13,7 +13,7 @@ all: build data expert-qc community-qc deep-learning-figures bundle-profiles
 # Build all of the necessary docker images
 build:
 	@echo "Building all of the necessary docker images"
-	@docker inspect hbn-pod2/base:conda-tex > /dev/null 2>&1 && echo "Base image already exists" || docker build -t hbn-pod2/base:conda-tex -f docker/base/Dockerfile docker/base
+	@docker inspect hbn-pod2/base:conda-tex > /dev/null 2>&1 && echo "Base image already exists" || docker buildx build --platform=linux/amd64 -t hbn-pod2/base:conda-tex -f docker/base/Dockerfile docker/base
 	@docker compose build
 
 # Download data from OSF
@@ -57,6 +57,11 @@ bundle-profiles:
 inference:
 	@echo "Demonstrating the effect of QC on inference using an age prediction example"
 	@docker compose run inference
+	
+# Train site generalization models and compute performance metrics
+site-generalization:
+	@echo "Training site generalization models and computing performance metrics"
+	@docker compose run site-generalization
 
 ##
 ## Commands for launching deep learning model training on GCP. For these commands to work, you must have a GCP account and set up your GCP environment variables in a .env file in this directory.  A template is provided in .env.template.
