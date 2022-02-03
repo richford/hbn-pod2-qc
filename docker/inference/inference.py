@@ -145,6 +145,7 @@ def age_predict_qc_sweep(out_dir, csv_dir, recompute=False, model_type="xgb"):
             label="Age prediction R^2 (left axis)",
             ax=ax0,
         )
+
     _ = ax0.set_xticks(np.linspace(0, 1, 11))
     ax1 = ax0.twinx()
     _ = sns.lineplot(

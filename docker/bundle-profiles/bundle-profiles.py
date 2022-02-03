@@ -15,6 +15,7 @@ from afqinsight.plot import plot_tract_profiles
 from matplotlib.lines import Line2D
 from neurocombat_sklearn import CombatModel
 from plot_formatting import set_size, FULL_WIDTH, TEXT_WIDTH
+from scipy.stats import pearsonr
 from seaborn.categorical import categorical_order
 from seaborn.palettes import color_palette
 from sklearn.impute import SimpleImputer
@@ -141,6 +142,16 @@ def plot_qc_stats(fig_dir):
 
     mpl.rcParams["lines.linewidth"] = linewidth
 
+    r, p = pearsonr(participants["Age"], participants["QC Score"])
+    reg_ax.text(
+        x=0.05,
+        y=0.95,
+        s="r={:.2f}, p={:.2g}".format(r, p),
+        transform=reg_ax.transAxes,
+        ha="left",
+        va="top",
+    )
+
     dist_ax.spines["top"].set_visible(False)
     dist_ax.spines["right"].set_visible(False)
     dist_ax.set_ylabel("")
@@ -237,8 +248,20 @@ def plot_qsiprep_stats(fig_dir):
     ]
     df_merged = df_qc.merge(participants, left_index=True, right_index=True)
 
-    figsize = set_size(width=TEXT_WIDTH, subplots=(4, 4))
-    fig, axes = plt.subplots(2, 2, figsize=figsize)
+    width, height = set_size(width=TEXT_WIDTH, subplots=(2, 2))
+    fig, axes = plt.subplots(
+        3,
+        2,
+        gridspec_kw=dict(height_ratios=[0.47, 0.47, 0.06]),
+        figsize=(width, 1.2 * height),
+    )
+
+    gs = axes[2, 0].get_gridspec()
+    # remove the underlying axes
+    for ax in axes[2, :]:
+        ax.remove()
+
+    cax = fig.add_subplot(gs[2, :])
     fig.tight_layout(pad=2)
 
     _ = sns.violinplot(
@@ -277,7 +300,7 @@ def plot_qsiprep_stats(fig_dir):
     hue_order = categorical_order(df_merged["Age"])
     palette = color_palette("viridis", len(hue_order))
 
-    for ax, x_var, y_var in zip(axes.flatten()[1:], x_vars, y_vars):
+    for ax, x_var, y_var in zip(axes.flatten()[1:4], x_vars, y_vars):
         for idx, age in enumerate(hue_order):
             _df = df_merged[df_merged["Age"] == age].copy()
             _ = sns.scatterplot(
@@ -292,20 +315,32 @@ def plot_qsiprep_stats(fig_dir):
                 s=11,
             )
 
-    handles = [
-        Line2D([0], [0], color=color, ls="", marker="o", ms=4) for color in palette
-    ]
+    norm = plt.Normalize(df_merged["Age"].min(), df_merged["Age"].max())
+    sm = plt.cm.ScalarMappable(cmap="viridis", norm=norm)
+    sm.set_array([])
 
-    _ = axes[1, 0].legend(
-        handles,
-        hue_order,
-        title="Age",
-        loc="upper center",
-        bbox_to_anchor=(1.05, -0.25),
-        ncol=len(hue_order),
-        handletextpad=-0.5,
-        columnspacing=0.3,
+    fig.colorbar(
+        sm,
+        orientation="horizontal",
+        cax=cax,
+        ticks=hue_order,
+        label="Age",
     )
+
+    # handles = [
+    #     Line2D([0], [0], color=color, ls="", marker="o", ms=4) for color in palette
+    # ]
+
+    # _ = axes[1, 0].legend(
+    #     handles,
+    #     hue_order,
+    #     title="Age",
+    #     loc="upper center",
+    #     bbox_to_anchor=(1.05, -0.25),
+    #     ncol=len(hue_order),
+    #     handletextpad=-0.5,
+    #     columnspacing=0.3,
+    # )
 
     for ax, letter in zip(axes.flatten(), "abcd"):
         these_kwargs = TEXT_KWARGS.copy()
