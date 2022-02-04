@@ -12,6 +12,8 @@ import re
 import s3fs
 import seaborn as sns
 
+from matplotlib.lines import Line2D
+from matplotlib.markers import MarkerStyle
 from plot_formatting import set_size, FULL_WIDTH, TEXT_WIDTH
 from sklearn.calibration import calibration_curve
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, roc_auc_score
@@ -32,7 +34,7 @@ BBOX = dict(
 )
 
 TEXT_KWARGS = dict(
-    x=-0.15,
+    x=-0.025,
     y=1,
     ha="center",
     va="center",
@@ -277,7 +279,7 @@ def xgb_site_generalization(
     return df_predictions, df_performance
 
 
-def plot_dl_site_generalization(dl_prediction_dir, fig_dir):
+def dl_site_generalization(dl_prediction_dir):
     participants = pd.read_csv(
         "s3://fcp-indi/data/Projects/HBN/BIDS_curated/derivatives/qsiprep/participants.tsv",
         sep="\t",
@@ -367,162 +369,121 @@ def plot_dl_site_generalization(dl_prediction_dir, fig_dir):
 
         df_performance[split] = pd.DataFrame(dataframe_dicts)
 
-    colors = plt.get_cmap("tab10").colors
-    fig = plt.figure(figsize=set_size(width=FULL_WIDTH, subplots=(3, 2)))
-
-    spec = fig.add_gridspec(3, 2, hspace=0.45)
-    ax0 = fig.add_subplot(spec[0, :])
-    ax1 = fig.add_subplot(spec[1, :])
-    ax2 = fig.add_subplot(spec[2, 0])
-    ax3 = fig.add_subplot(spec[2, 1])
-    ax2.get_shared_y_axes().join(ax2, ax3)
-
-    for (split, df), ax in zip(df_performance.items(), [ax0, ax1]):
-        _ = sns.stripplot(
-            data=df,
-            x="site",
-            y="score",
-            hue="metric",
-            order=sites,
-            hue_order=["ROC AUC", "Accuracy", "Balanced accuracy"],
-            dodge=True,
-            ax=ax,
-            size=SWARM_SIZE,
-            palette=colors,
-        )
-
-        xlabels = ax.get_xticklabels()
-        xlabels = [label.get_text().replace(", ", "\n") for label in xlabels]
-        ax.set_xticklabels(xlabels)
-        ax.set_title(split.capitalize() + " set")
-
-    axes = [ax2, ax3]
-    for ax in axes:
-        ax.plot([0, 1], [0, 1], "k:", label="Perfectly calibrated")
-
-    for ax, (split, df_split) in zip(axes, df_prediction.items()):
-        for site, color, marker in zip(sites, colors[3:], ["s", "^", "X", "*"]):
-            df = df_split[df_split["sites"] == site].copy()
-
-            if split == "report":
-                y = "Expert rating"
-            else:
-                y = "XGB rating"
-
-            prob_true, prob_pred = calibration_curve(
-                y_true=(df[y] > 0.5).astype(int),
-                y_prob=df["y_prob"],
-                n_bins=5,
-            )
-
-            ax.plot(
-                prob_pred, prob_true, ls="-", marker=marker, color=color, label=site
-            )
-
-        ax.set_title(f"{split.capitalize()} Calibration curve (reliability diagram)")
-        ax.set_xlabel("Mean predicted probability")
-        ax.set_ylabel("Fraction of positives")
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-
-    ax0.get_legend().remove()
-    ax2.legend(
-        loc="upper center",
-        bbox_to_anchor=(1.1, -0.2),
-        framealpha=1.0,
-        ncol=3,
-        borderpad=0.2,
-        columnspacing=1.0,
-        handletextpad=0.2,
-    )
-
-    fig.savefig(op.join(fig_dir, "dl_site_generalization.pdf"), bbox_inches="tight")
+    return df_prediction, df_performance
 
 
-def plot_xgb_site_generalization(
-    expert_rating_file,
-    fibr_dir,
-    xgb_model_dir,
-    fig_dir,
+def plot_site_generalization(
+    dl_prediction_dir, expert_rating_file, fibr_dir, xgb_model_dir, fig_dir
 ):
-    df_prediction, df_performance = xgb_site_generalization(
+    dl_prediction, dl_performance = dl_site_generalization(dl_prediction_dir)
+    xgb_prediction, xgb_performance = xgb_site_generalization(
         expert_rating_file=expert_rating_file,
         fibr_dir=fibr_dir,
         xgb_model_dir=xgb_model_dir,
     )
 
     colors = plt.get_cmap("tab10").colors
-    sites = sorted(pd.unique(df_prediction["sites"]))
-
-    fig, axes = plt.subplots(
-        1,
-        2,
-        figsize=set_size(width=FULL_WIDTH, subplots=(1, 2)),
-        gridspec_kw=dict(width_ratios=[0.6, 0.4]),
-    )
+    width, height = set_size(width=TEXT_WIDTH, subplots=(2, 1))
+    fig, axes = plt.subplots(2, 1, figsize=(width, 0.6 * height), sharex=True)
     fig.tight_layout()
 
-    ax0 = axes[0]
-    ax1 = axes[1]
+    hue_order = ["ROC AUC", "Accuracy", "Balanced accuracy"]
+    markers = ["o", "x"]
+    linewidths = [0, 2]
+    handles = []
+    labels = []
+    for (split, df), marker, linewidth in zip(
+        dl_performance.items(), markers, linewidths
+    ):
+        sites = sorted(pd.unique(df["site"]))
+        _ = sns.stripplot(
+            data=df,
+            x="site",
+            y="score",
+            hue="metric",
+            order=sites,
+            hue_order=hue_order,
+            dodge=True,
+            ax=axes[0],
+            size=SWARM_SIZE,
+            palette=colors,
+            marker=marker,
+            linewidth=linewidth,
+            alpha=0.8,
+        )
+        handles.append(
+            Line2D(
+                [0], [0], color="black", ls="", marker=marker, ms=6, linewidth=linewidth
+            )
+        )
+        labels.append(f"{split.capitalize()} set")
 
+    axes[0].get_legend().remove()
+    axes[0].legend(
+        handles,
+        labels,
+        loc="lower right",
+        bbox_to_anchor=(0.725, 0.0),
+        title="Evaluation split",
+    )
+
+    sites = sorted(pd.unique(xgb_performance["site"]))
     _ = sns.stripplot(
-        data=df_performance,
+        data=xgb_performance,
         x="site",
         y="score",
         hue="metric",
         order=sites,
-        hue_order=["ROC AUC", "Accuracy", "Balanced accuracy"],
+        hue_order=hue_order,
         dodge=True,
-        ax=ax0,
+        ax=axes[-1],
         size=SWARM_SIZE,
         palette=colors,
+        alpha=0.8,
     )
 
-    xlabels = ax0.get_xticklabels()
-    xlabels = [label.get_text().replace(", ", "\n") for label in xlabels]
-    ax0.set_xticklabels(xlabels)
+    for ax in axes:
+        xlabels = ax.get_xticklabels()
+        xlabels = [label.get_text().replace(", ", "\n") for label in xlabels]
+        ax.set_xticklabels(xlabels)
 
-    handles, labels = ax0.get_legend_handles_labels()
-    ax0.get_legend().remove()
+    axes[0].set_xlabel("")
+    axes[1].set_xlabel("Site")
 
-    ax1.plot([0, 1], [0, 1], "k:", label="Perfectly calibrated")
+    axes[0].set_ylabel("Score (CNN-i model)")
+    axes[1].set_ylabel("Score (XGB-q model)")
 
-    for site, color, marker in zip(sites, colors[3:], ["s", "^", "X", "*"]):
-        df = df_prediction[df_prediction["sites"] == site].copy()
+    handles, labels = axes[1].get_legend_handles_labels()
+    leg = axes[0].get_legend()
+    axes[0].add_artist(leg)
+    axes[1].get_legend().remove()
 
-        prob_true, prob_pred = calibration_curve(
-            y_true=(df["y_true"] > 0.5).astype(int),
-            y_prob=df["y_prob"],
-            n_bins=5,
+    ymin, ymax = np.inf, -np.inf
+    for ax in axes:
+        ax.legend(
+            handles,
+            labels,
+            loc="lower left",
+            bbox_to_anchor=(0.725, 0.0),
+            title="Metric",
         )
 
-        ax1.plot(prob_pred, prob_true, marker=marker, ls="-", color=color, label=site)
+        _ymin, _ymax = ax.get_ylim()
+        if _ymin < ymin:
+            ymin = _ymin
+        if _ymax > ymax:
+            ymax = _ymax
 
-    ax1.set_title("Calibration curve (reliability diagram)")
-    ax1.set_xlabel("Mean predicted probability")
-    ax1.set_ylabel("Fraction of positives")
-    handles1, labels1 = ax1.get_legend_handles_labels()
-    handles = handles + handles1
-    labels = labels + labels1
+    for ax, letter in zip(axes.flatten(), "ab"):
+        these_kwargs = TEXT_KWARGS.copy()
+        _ = ax.text(
+            s=letter,
+            transform=ax.transAxes,
+            **these_kwargs,
+        )
+        ax.set_ylim(ymin, ymax)
 
-    transposed_indices = [0, 4, 1, 5, 2, 6, 3, 7]
-    handles = [handles[i] for i in transposed_indices]
-    labels = [labels[i] for i in transposed_indices]
-
-    ax0.legend(
-        handles,
-        labels,
-        loc="upper left",
-        bbox_to_anchor=(-0.1, -0.25),
-        framealpha=1.0,
-        ncol=4,
-        borderaxespad=0.0,
-        borderpad=0.2,
-        columnspacing=1.0,
-        handletextpad=0.2,
-    )
-
-    fig.savefig(op.join(fig_dir, "xgb_site_generalization.pdf"), bbox_inches="tight")
+    fig.savefig(op.join(fig_dir, "site_generalization.pdf"), bbox_inches="tight")
 
 
 if __name__ == "__main__":
@@ -551,11 +512,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     with plt.style.context("/tex.mplstyle"):
-        plot_dl_site_generalization(
+        plot_site_generalization(
             dl_prediction_dir=args.dl_prediction_dir,
-            fig_dir=args.fig_dir,
-        )
-        plot_xgb_site_generalization(
             expert_rating_file=args.expert_rating_file,
             fibr_dir=args.fibr_dir,
             xgb_model_dir=args.xgb_model_dir,
