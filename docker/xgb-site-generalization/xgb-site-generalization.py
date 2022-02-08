@@ -444,7 +444,10 @@ def plot_site_generalization(
 
     for ax in axes:
         xlabels = ax.get_xticklabels()
-        xlabels = [label.get_text().replace(", ", "\n") for label in xlabels]
+        xlabels = [
+            label.get_text().replace(", ", "\n").replace("test", "eval")
+            for label in xlabels
+        ]
         ax.set_xticklabels(xlabels)
 
     axes[0].set_xlabel("")
