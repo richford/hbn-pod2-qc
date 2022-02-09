@@ -486,6 +486,33 @@ def plot_site_generalization(
         )
         ax.set_ylim(ymin, ymax)
 
+    stats = {
+        "dl": pd.concat([dl_performance["report"], dl_performance["test"]]),
+        "xgb": xgb_performance.copy(),
+    }
+
+    for key in stats.keys():
+        stats[key] = (
+            stats[key]
+            .groupby(["site", "metric"])
+            .agg(["mean", "std"])
+            .round(3)["score"]
+            .unstack(level=-1)
+            .swaplevel(0, 1, axis=1)
+            .sort_index(axis=1)
+        )
+
+        stats[key] = pd.DataFrame(
+            {
+                col: stats[key].filter(like=col).astype(str).apply("\pm".join, 1)
+                for col in stats[key].columns.levels[0]
+            }
+        )
+
+    df_stats = pd.concat([stats["dl"], stats["xgb"]], axis=0, keys=["CNN-i", "XGB-q"])
+    df_stats.to_csv(op.join(fig_dir, "site_generalization.csv"))
+    df_stats.to_latex(op.join(fig_dir, "site_generalization.tex"), longtable=False)
+
     fig.savefig(op.join(fig_dir, "site_generalization.pdf"), bbox_inches="tight")
 
 
