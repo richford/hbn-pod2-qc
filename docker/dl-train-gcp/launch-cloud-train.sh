@@ -1,5 +1,5 @@
 #!/bin/sh
-JOB_NAME=$1
+JOB_NAME="${1:-$(echo $RANDOM | md5 | head -c20; echo;)}"
 
 export GOOGLE_APPLICATION_CREDENTIALS=/home/google_application_credentials/${GOOGLE_APPLICATION_CREDENTIALS_FILE}
 

@@ -7,7 +7,12 @@ import tensorflow as tf
 
 
 def build_multi_input_model(
-    width=128, height=128, depth=128, n_image_channels=3, n_qc_metrics=31, neglect_qc=False
+    width=128,
+    height=128,
+    depth=128,
+    n_image_channels=3,
+    n_qc_metrics=31,
+    neglect_qc=False,
 ):
     """Build a multi-input model that concatenates a 3D convolutional neural
     network model and a dense model for QC inputs.
@@ -56,19 +61,27 @@ def build_model(width=128, height=128, depth=128, n_channels=3, include_top=True
 
     inputs = tf.keras.Input((width, height, depth, n_channels))
 
-    x = tf.keras.layers.Conv3D(filters=64, kernel_size=3, padding="same", activation="relu")(inputs)
+    x = tf.keras.layers.Conv3D(
+        filters=64, kernel_size=3, padding="same", activation="relu"
+    )(inputs)
     x = tf.keras.layers.MaxPool3D(pool_size=2)(x)
     x = tf.keras.layers.BatchNormalization()(x)
 
-    x = tf.keras.layers.Conv3D(filters=64, kernel_size=3, padding="same", activation="relu")(x)
+    x = tf.keras.layers.Conv3D(
+        filters=64, kernel_size=3, padding="same", activation="relu"
+    )(x)
     x = tf.keras.layers.MaxPool3D(pool_size=2)(x)
     x = tf.keras.layers.BatchNormalization()(x)
 
-    x = tf.keras.layers.Conv3D(filters=128, kernel_size=3, padding="same", activation="relu")(x)
+    x = tf.keras.layers.Conv3D(
+        filters=128, kernel_size=3, padding="same", activation="relu"
+    )(x)
     x = tf.keras.layers.MaxPool3D(pool_size=2)(x)
     x = tf.keras.layers.BatchNormalization()(x)
 
-    x = tf.keras.layers.Conv3D(filters=256, kernel_size=3, padding="same", activation="relu")(x)
+    x = tf.keras.layers.Conv3D(
+        filters=256, kernel_size=3, padding="same", activation="relu"
+    )(x)
     x = tf.keras.layers.MaxPool3D(pool_size=2)(x)
     x = tf.keras.layers.BatchNormalization()(x)
 
@@ -96,7 +109,7 @@ def main(
     job_name,
     n_epochs=5,
     n_channels=3,
-    dataset_name="b0-colorfa-rgb",
+    dataset_name="b0-tensorfa-dwiqc",
     dataset_seed=0,
     model_loss="binary_crossentropy",
     compute_volume_numbers=False,
@@ -122,7 +135,7 @@ def main(
         strategy = tf.distribute.MirroredStrategy()
         print("GPUs detected.")
         print("Number of accelerators: ", strategy.num_replicas_in_sync)
-    
+
     # Train using mixed-precision policy
     tf.keras.mixed_precision.set_global_policy("mixed_float16")
 
@@ -273,7 +286,9 @@ def main(
                 m.update_state(y_true, y_pred)
                 return m.result().numpy()
 
-            model = build_multi_input_model(n_image_channels=n_channels - 1, neglect_qc=neglect_qc)
+            model = build_multi_input_model(
+                n_image_channels=n_channels - 1, neglect_qc=neglect_qc
+            )
 
             model.compile(
                 loss=model_loss,
@@ -296,7 +311,9 @@ def main(
                 label_y, num_parallel_calls=num_parallel_calls
             )
 
-            model = build_multi_input_model(n_image_channels=n_channels - 1, neglect_qc=neglect_qc)
+            model = build_multi_input_model(
+                n_image_channels=n_channels - 1, neglect_qc=neglect_qc
+            )
 
             model.compile(
                 loss=model_loss,
@@ -330,11 +347,16 @@ def main(
     tensorboard = tf.keras.callbacks.TensorBoard(log_dir=TENSORBOARD_LOGS_DIR)
 
     early_stop = tf.keras.callbacks.EarlyStopping(
-        monitor="val_loss", min_delta=0.001, patience=20,
+        monitor="val_loss",
+        min_delta=0.001,
+        patience=20,
     )
 
     reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(
-        monitor='val_loss', factor=0.5, patience=2, verbose=1,
+        monitor="val_loss",
+        factor=0.5,
+        patience=2,
+        verbose=1,
     )
 
     # Configure Tensorboard logs

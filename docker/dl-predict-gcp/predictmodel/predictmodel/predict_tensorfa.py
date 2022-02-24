@@ -16,7 +16,7 @@ def main(
     gcs_bucket,
     job_name,
     n_channels=3,
-    dataset_name="b0-colorfa-rgb",
+    dataset_name="b0-tensorfa-dwiqc",
     dataset_seed=0,
     model_loss="binary_crossentropy",
     compute_volume_numbers=False,
