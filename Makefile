@@ -64,18 +64,18 @@ site-generalization:
 	@docker compose run site-generalization
 
 ##
-## Commands for launching deep learning model training on GCP. For these commands to work, you must have a GCP account and set up your GCP environment variables in a .env file in this directory.  A template is provided in .env.template.
+## Commands for launching deep learning model training on GCP. For these commands to work, you must have a GCP account and set up your GCP environment variables in a .env file in this directory.  A template is provided in .env.template. For further details see README_GCP.md.
 ##
 
 # Train the deep learning model on GCP
 dl-train:
 	@echo "Launching deep learning model training on GCP"
-	@docker compose run dl-train-gcp
+	@docker compose run dl-train-gcp b0_tensorfa_dwiqc
 
 # Predict QC ratings using the trained models on GCP
 dl-predict:
 	@echo "Launching deep learning model prediction on GCP"
-	@docker compose run dl-predict-gcp
+	@docker compose run dl-predict-gcp b0_tensorfa_dwiqc
 
 # Train site generalization models on GCP
 dl-site-generalization:
@@ -85,4 +85,4 @@ dl-site-generalization:
 # Generate attribution maps using integrated gradients on GCP
 dl-integrated-gradients:
 	@echo "Launching integrated gradients on GCP"
-	@docker compose run dl-integrated-gradients-gcp
+	@docker compose run dl-integrated-gradients-gcp site_gen

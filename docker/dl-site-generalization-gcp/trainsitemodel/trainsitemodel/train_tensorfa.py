@@ -179,26 +179,21 @@ def main(
 
     # Specify the datasets on GCP storage
     GCS_DATA_PATH = f"gs://{gcs_bucket}"
-    GCS_NIFTI_DIR = op.join(GCS_DATA_PATH, "nifti")
     GCS_TFREC_DIR = op.join(GCS_DATA_PATH, "tfrecs")
 
     if use_tpu:
-        device_nifti_dir = GCS_NIFTI_DIR
         train_tfrec_dir = op.join(
             GCS_TFREC_DIR, "_".join(train_sites), f"seed-{dataset_seed}"
         )
         test_tfrec_dir = op.join(GCS_TFREC_DIR, "_".join(test_sites))
     else:
-        device_nifti_dir = op.join(".", "nifti")
         device_tfrec_dir = op.join(".", "tfrecs")
         train_tfrec_dir = op.join(
             device_tfrec_dir, "_".join(train_sites), f"seed-{dataset_seed}"
         )
         test_tfrec_dir = op.join(device_tfrec_dir, "_".join(test_sites))
-        os.makedirs(device_nifti_dir, exist_ok=True)
         os.makedirs(train_tfrec_dir, exist_ok=True)
         os.makedirs(test_tfrec_dir, exist_ok=True)
-        fs.get(GCS_NIFTI_DIR, device_nifti_dir, recursive=True)
         fs.get(
             "/".join([GCS_TFREC_DIR, "_".join(train_sites), f"seed-{dataset_seed}"]),
             train_tfrec_dir,

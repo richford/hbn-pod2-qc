@@ -1,6 +1,6 @@
 #!/bin/sh
-JOB_NAME=$1
-TARGET_CLASS=$2
+JOB_NAME="${1:-$(echo $RANDOM | md5 | head -c20; echo;)}"
+TARGET_CLASS="${2:-1}"
 
 export GOOGLE_APPLICATION_CREDENTIALS=/home/google_application_credentials/${GOOGLE_APPLICATION_CREDENTIALS_FILE}
 
