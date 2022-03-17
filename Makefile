@@ -17,49 +17,49 @@ build:
 	@docker compose build
 
 # Download data from OSF
-data:
+data: build
 	@echo "Downloading data from OSF"
 	@docker compose run osf-download
 	@echo "This download excluded the NIfTI files and TFRecords, which are large and can be time consuming to download."
 	@echo "To download those files, use the make niftis and make tfrecs commands, respectively."
 
 # Download nifti files from OSF
-niftis:
+niftis: build
 	@echo "Downloading NIfTI files from FCP-INDI"
 	@docker compose run nifti-download
 
 # Download tfrecs files from OSF
-tfrecs:
+tfrecs: build
 	@echo "Downloading tfrecs from FCP-INDI"
 	@docker compose run tfrec-download
 
 # Analyze expert ratings and generate derived figures
-expert-qc:
+expert-qc: build
 	@echo "Analyzing expert ratings and generating derived figures"
 	@docker compose run expert-qc
 
 # Analyze community ratings and generate derived figures
-community-qc:
+community-qc: build
 	@echo "Analyzing community ratings and generating derived figures"
 	@docker compose run community-qc
 
 # Plot figures for the deep learning QC pipeline
-deep-learning-figures:
+deep-learning-figures: build
 	@echo "Plotting figures for the deep learning QC pipeline"
 	@docker compose run dl-figures 
 
 # Plot bundle profiles binned by QC score
-bundle-profiles:
+bundle-profiles: build
 	@echo "Plotting bundle profiles binned by QC score"
 	@docker compose run bundle-profiles
 
 # Demonstrate the effect of QC on inference using an age prediction example
-inference:
+inference: build
 	@echo "Demonstrating the effect of QC on inference using an age prediction example"
 	@docker compose run inference
 	
 # Train site generalization models and compute performance metrics
-site-generalization:
+site-generalization: build
 	@echo "Training site generalization models and computing performance metrics"
 	@docker compose run site-generalization
 
@@ -68,21 +68,21 @@ site-generalization:
 ##
 
 # Train the deep learning model on GCP
-dl-train:
+dl-train: build
 	@echo "Launching deep learning model training on GCP"
 	@docker compose run dl-train-gcp b0_tensorfa_dwiqc
 
 # Predict QC ratings using the trained models on GCP
-dl-predict:
+dl-predict: build
 	@echo "Launching deep learning model prediction on GCP"
 	@docker compose run dl-predict-gcp b0_tensorfa_dwiqc
 
 # Train site generalization models on GCP
-dl-site-generalization:
+dl-site-generalization: build
 	@echo "Launching site generalization model training on GCP"
 	@docker compose run dl-site-generalization-gcp
 
 # Generate attribution maps using integrated gradients on GCP
-dl-integrated-gradients:
+dl-integrated-gradients: build
 	@echo "Launching integrated gradients on GCP"
 	@docker compose run dl-integrated-gradients-gcp site_gen
