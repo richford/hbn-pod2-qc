@@ -45,7 +45,7 @@ services:
     image: hbn-pod2/dl-train-gcp
     platform: linux/amd64
     volumes:
-      - ${GOOGLE_APPLICATION_CREDENTIALS_DIR}:/home/google_application_credentials/
+      - ${GOOGLE_APPLICATION_CREDENTIALS_DIR:-/dev/null}:/home/google_application_credentials/
     environment:
       - PROJECT_ID=${PROJECT_ID}
       - BUCKET_NAME=${BUCKET_NAME}
@@ -62,7 +62,7 @@ services:
     image: hbn-pod2/dl-predict-gcp
     platform: linux/amd64
     volumes:
-      - ${GOOGLE_APPLICATION_CREDENTIALS_DIR}:/home/google_application_credentials/
+      - ${GOOGLE_APPLICATION_CREDENTIALS_DIR:-/dev/null}:/home/google_application_credentials/
     environment:
       - PROJECT_ID=${PROJECT_ID}
       - BUCKET_NAME=${BUCKET_NAME}
@@ -79,7 +79,7 @@ services:
     image: hbn-pod2/dl-integrated-gradients-gcp
     platform: linux/amd64
     volumes:
-      - ${GOOGLE_APPLICATION_CREDENTIALS_DIR}:/home/google_application_credentials/
+      - ${GOOGLE_APPLICATION_CREDENTIALS_DIR:-/dev/null}:/home/google_application_credentials/
     environment:
       - PROJECT_ID=${PROJECT_ID}
       - BUCKET_NAME=${BUCKET_NAME}
@@ -96,7 +96,7 @@ services:
     image: hbn-pod2/dl-site-generalization-gcp
     platform: linux/amd64
     volumes:
-      - ${GOOGLE_APPLICATION_CREDENTIALS_DIR}:/home/google_application_credentials/
+      - ${GOOGLE_APPLICATION_CREDENTIALS_DIR:-/dev/null}:/home/google_application_credentials/
     environment:
       - PROJECT_ID=${PROJECT_ID}
       - BUCKET_NAME=${BUCKET_NAME}
