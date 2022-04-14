@@ -431,10 +431,12 @@ def xgb_qc(
     ax.set_xlabel("False Positive Rate")
     ax.set_ylabel("True Positive Rate")
 
+    these_kwargs = TEXT_KWARGS.copy()
+    these_kwargs.update(dict(x=-0.175))
     ax.text(
         s="c",
         transform=ax.transAxes,
-        **TEXT_KWARGS,
+        **these_kwargs,
     )
 
     plot_title = "xgb-roc-curve"
@@ -546,7 +548,7 @@ def xgb_qc(
     qc_ratings.to_csv(op.join(output_dir, f"{qc_csv_title}.csv"))
     # print(qc_weights)
 
-    _save_participants_tsv(qc_ratings, output_dir, image_type=image_type)
+    # _save_participants_tsv(qc_ratings, output_dir, image_type=image_type)
 
 
 def compute_irr_with_xgb_rater(expert_qc_dir, fibr_deriv_dir, fig_dir):
@@ -647,7 +649,7 @@ def compute_irr_with_xgb_rater(expert_qc_dir, fibr_deriv_dir, fig_dir):
     _ = ax.set_ylabel("rater", labelpad=-1)
     _ = ax.set_xlabel("rater")
     these_kwargs = TEXT_KWARGS.copy()
-    these_kwargs.update(dict(y=1.1))
+    these_kwargs.update(dict(x=-0.05, y=1.05))
     _ = ax.text(
         s="e",
         transform=ax.transAxes,
@@ -675,15 +677,21 @@ def plot_xgb_scatter(expert_rating_file, output_dir, fibr_dir, fig_dir):
             right_index=True,
         )
     )
-    xgb_qc = pd.read_csv(op.join(output_dir, "qc_ratings.csv"), index_col="subject_id")
+    df_xgb_qc = pd.read_csv(
+        op.join(output_dir, "qc_ratings.csv"), index_col="subject_id"
+    )
     merged = pd.merge(
-        pd.merge(y[["rating"]], xgb_qc, how="left", left_index=True, right_index=True),
+        pd.merge(
+            y[["rating"]], df_xgb_qc, how="left", left_index=True, right_index=True
+        ),
         pd.DataFrame(
             X[fibr_votes.columns].mean(axis="columns"), columns=["fibr rating"]
         ),
         left_index=True,
         right_index=True,
     )
+
+    del df_xgb_qc
 
     fig, axes = plt.subplots(
         1,
@@ -705,19 +713,21 @@ def plot_xgb_scatter(expert_rating_file, output_dir, fibr_dir, fig_dir):
         these_kwargs = TEXT_KWARGS.copy()
         if letter == "b":
             these_kwargs.update(dict(x=0))
+        else:
+            these_kwargs.update(dict(x=-0.1))
         ax.text(
             s=letter,
             transform=ax.transAxes,
             **these_kwargs,
         )
 
+    del merged
     fig.savefig(op.join(fig_dir, "fibr-rating-scatter-plot.pdf"), bbox_inches="tight")
+    del fig, axes
 
     X_all = pd.merge(X, y, left_index=True, right_index=True)
 
-    hist_ax = sns.histplot(data=X_all, x="rating")
-    hist_yticks = hist_ax.get_yticks()
-    hist_ylabels = hist_ax.get_yticklabels()
+    del X, y
 
     X_all.rename(
         columns={
@@ -729,23 +739,25 @@ def plot_xgb_scatter(expert_rating_file, output_dir, fibr_dir, fig_dir):
         inplace=True,
     )
 
-    fig, axes = plt.subplots(
+    fig1, axes1 = plt.subplots(
         2, 2, figsize=set_size(width=0.6 * FULL_WIDTH, subplots=(2, 2))
     )
-    fig.tight_layout()
+    fig1.tight_layout()
 
     for x_var, ax in zip(
         ["Neighboring DWI correlation", "Num outlier slices", "Max rel. translation"],
-        axes.flatten()[1:],
+        axes1.flatten()[1:],
     ):
         _ = sns.scatterplot(data=X_all, x=x_var, y="Expert rating", s=14, ax=ax)
         r, _ = pearsonr(X_all[x_var], X_all["Expert rating"])
         print(f"Pearson_R({x_var}, Expert rating) = {r:.3f}")
 
-    _ = sns.histplot(data=X_all, x="Expert rating", ax=axes[0, 0])
+    _ = sns.histplot(data=X_all, x="Expert rating", ax=axes1[0, 0])
 
-    # tick_labels = axes[0, 0].get_yticklabels()
-    for letter, ax in zip("abcd", axes.flatten()):
+    # tick_labels = axes1[0, 0].get_yticklabels()
+    these_kwargs = TEXT_KWARGS.copy()
+    these_kwargs.update(dict(y=1.1))
+    for letter, ax in zip("abcd", axes1.flatten()):
         label = ax.get_xlabel()
         ax.set_xlabel(label, labelpad=-0.5)
         label = ax.get_ylabel()
@@ -756,7 +768,7 @@ def plot_xgb_scatter(expert_rating_file, output_dir, fibr_dir, fig_dir):
             **TEXT_KWARGS,
         )
 
-    fig.savefig(
+    fig1.savefig(
         op.join(fig_dir, "expert-qsiprep-pairplot.pdf"),
         bbox_inches="tight",
     )

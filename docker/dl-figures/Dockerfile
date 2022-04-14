@@ -7,6 +7,7 @@ COPY package-list.txt /package-list.txt
 RUN conda install --file /package-list.txt --yes
 RUN conda install -c plotly plotly
 RUN conda install nilearn
+RUN conda install s3fs
 
 COPY dl-figures.py /usr/local/bin/dl-figures.py
 RUN chmod +x /usr/local/bin/dl-figures.py 

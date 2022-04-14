@@ -512,7 +512,7 @@ def save_attribution_maps(nifti_dir, out_dir):
         )
 
 
-def visualize_site_generalization(output_dir):
+def visualize_site_generalization():
     participants = pd.read_csv(
         "s3://fcp-indi/data/Projects/HBN/BIDS_curated/derivatives/qsiprep/participants.tsv",
         sep="\t",
@@ -581,7 +581,7 @@ def visualize_site_generalization(output_dir):
             data=hist_melt[hist_melt["Site"] == site],
             x="rating",
             hue="type",
-            element="step",
+            element="bars",
             stat="probability",
             fill=False,
             common_norm=False,
@@ -626,22 +626,20 @@ if __name__ == "__main__":
     # )
 
     with plt.style.context("/tex.mplstyle"):
-        # visualize_loss_curves(
-        #     log_dir=args.training_log_dir,
-        #     output_dir=dl_fig_dir,
-        # )
+        visualize_loss_curves(
+            log_dir=args.training_log_dir,
+            output_dir=dl_fig_dir,
+        )
 
-        # visualize_auc_curves(
-        #     report_set_dir=args.report_set_dir,
-        #     output_dir=dl_fig_dir,
-        # )
-
-        visualize_site_generalization(output_dir=dl_fig_dir)
+        visualize_auc_curves(
+            report_set_dir=args.report_set_dir,
+            output_dir=dl_fig_dir,
+        )
 
     # save_hbn_pod2_sankey(args.fig_dir)
 
-    # with plt.style.context("/tex.mplstyle"):
-    #     save_attribution_maps(
-    #         nifti_dir=args.nifti_dir,
-    #         out_dir=dl_fig_dir,
-    #     )
+    with plt.style.context("/tex.mplstyle"):
+        save_attribution_maps(
+            nifti_dir=args.nifti_dir,
+            out_dir=dl_fig_dir,
+        )

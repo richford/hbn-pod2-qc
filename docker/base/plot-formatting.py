@@ -1,5 +1,5 @@
-FULL_WIDTH = 534.62721
-TEXT_WIDTH = 406.58981
+FULL_WIDTH = 500.484
+TEXT_WIDTH = 500.484
 
 
 def set_size(width, fraction=1, subplots=(1, 1)):

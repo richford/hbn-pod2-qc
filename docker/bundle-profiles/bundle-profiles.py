@@ -42,7 +42,7 @@ TEXT_KWARGS = dict(
 
 def plot_qc_bundle_profiles(fig_dir):
     dataset = AFQDataset(
-        fn_nodes="s3://hbn-afq/derivatives/afq_like_hcp/combined_tract_profiles.csv",
+        fn_nodes="s3://fcp-indi/data/Projects/HBN/BIDS_curated/derivatives/afq/combined_tract_profiles.csv",
         fn_subjects="s3://fcp-indi/data/Projects/HBN/BIDS_curated/derivatives/qsiprep/participants.tsv",
         target_cols=["dl_qc_score", "scan_site_id"],
         dwi_metrics=["dki_fa", "dki_md"],
@@ -173,6 +173,8 @@ def plot_qc_stats(fig_dir):
         these_kwargs = TEXT_KWARGS.copy()
         if letter == "d":
             these_kwargs.update(dict(x=-0.05))
+        else:
+            these_kwargs.update(dict(x=-0.1))
 
         _ = axis.text(
             s=letter,
@@ -344,6 +346,7 @@ def plot_qsiprep_stats(fig_dir):
 
     for ax, letter in zip(axes.flatten(), "abcd"):
         these_kwargs = TEXT_KWARGS.copy()
+        these_kwargs.update(dict(x=-0.125))
         _ = ax.text(
             s=letter,
             transform=ax.transAxes,
@@ -365,6 +368,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     with plt.style.context("/tex.mplstyle"):
-        # plot_qc_bundle_profiles(fig_dir=args.fig_dir)
+        plot_qc_bundle_profiles(fig_dir=args.fig_dir)
         plot_qc_stats(fig_dir=args.fig_dir)
         plot_qsiprep_stats(fig_dir=args.fig_dir)
