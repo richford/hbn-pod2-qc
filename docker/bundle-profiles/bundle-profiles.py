@@ -1,8 +1,10 @@
 #!/opt/conda/bin/python
 
 import argparse
+import dask.dataframe as dd
 import json
 import matplotlib as mpl
+import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import os.path as op
@@ -19,6 +21,7 @@ from scipy.stats import pearsonr
 from seaborn.categorical import categorical_order
 from seaborn.palettes import color_palette
 from sklearn.impute import SimpleImputer
+from sklearn.metrics import auc, roc_curve, roc_auc_score
 
 BBOX = dict(
     linewidth=1,
@@ -28,8 +31,8 @@ BBOX = dict(
 )
 
 TEXT_KWARGS = dict(
-    x=-0.15,
-    y=1,
+    x=-0.125,
+    y=0.975,
     ha="center",
     va="center",
     zorder=100,
@@ -83,7 +86,7 @@ def plot_qc_bundle_profiles(fig_dir):
         )
 
 
-def plot_qc_stats(fig_dir):
+def plot_qc_stats(fig_dir, hist_ax=None, dist_ax=None, reg_ax=None):
     participants = pd.read_csv(
         "s3://fcp-indi/data/Projects/HBN/BIDS_curated/derivatives/qsiprep/participants.tsv",
         sep=None,
@@ -103,10 +106,13 @@ def plot_qc_stats(fig_dir):
         "Age",
     ]
 
-    fig, ax = plt.subplots(
-        1, 2, figsize=set_size(width=TEXT_WIDTH, subplots=(1, 2)), sharey=True
-    )
-    fig.tight_layout()
+    if hist_ax is None:
+        fig, hist_ax = plt.subplots(
+            1, 2, figsize=set_size(width=TEXT_WIDTH, subplots=(1, 2)), sharey=True
+        )
+        fig.tight_layout()
+    else:
+        fig = None
 
     hist_kws = dict(
         data=participants,
@@ -118,11 +124,29 @@ def plot_qc_stats(fig_dir):
         bins=10,
     )
 
-    grid_kws = {"height_ratios": (0.18, 0.82), "hspace": 0}
-    width, height = set_size(width=0.5 * TEXT_WIDTH)
-    fig_reg, (dist_ax, reg_ax) = plt.subplots(
-        2, 1, gridspec_kw=grid_kws, figsize=(width, height), sharex=True
-    )
+    _ = sns.histplot(hue="Sex", ax=hist_ax[0], **hist_kws)
+    _ = sns.histplot(hue="Scan Site", ax=hist_ax[1], **hist_kws)
+
+    for axis, letter in zip(hist_ax, "cd"):
+        these_kwargs = TEXT_KWARGS.copy()
+
+        _ = axis.text(
+            s=letter,
+            transform=axis.transAxes,
+            **these_kwargs,
+        )
+
+    if fig is not None:
+        fig.savefig(op.join(fig_dir, "qc-hist.pdf"), bbox_inches="tight")
+
+    if dist_ax is None and reg_ax is None:
+        grid_kws = {"height_ratios": (0.18, 0.82), "hspace": 0}
+        width, height = set_size(width=0.5 * TEXT_WIDTH)
+        fig_reg, (dist_ax, reg_ax) = plt.subplots(
+            2, 1, gridspec_kw=grid_kws, figsize=(width, height), sharex=True
+        )
+    else:
+        fig_reg = None
 
     _ = sns.histplot(
         data=participants, x=participants["Age"], kde=False, discrete=True, ax=dist_ax
@@ -166,30 +190,20 @@ def plot_qc_stats(fig_dir):
     visible_ticks = {"top": False, "bottom": False}
     dist_ax.tick_params(axis="x", which="both", direction="out", **visible_ticks)
 
-    _ = sns.histplot(hue="Sex", ax=ax[0], **hist_kws)
-    _ = sns.histplot(hue="Scan Site", ax=ax[1], **hist_kws)
-
-    for axis, letter in zip(ax, "cd"):
-        these_kwargs = TEXT_KWARGS.copy()
-        if letter == "d":
-            these_kwargs.update(dict(x=-0.05))
-        else:
-            these_kwargs.update(dict(x=-0.1))
-
-        _ = axis.text(
-            s=letter,
-            transform=axis.transAxes,
-            **these_kwargs,
-        )
-
-    fig.savefig(op.join(fig_dir, "qc-hist.pdf"), bbox_inches="tight")
-
     _ = dist_ax.text(
         s="b",
         transform=dist_ax.transAxes,
         **TEXT_KWARGS,
     )
-    fig_reg.savefig(op.join(fig_dir, "qc-age-jointplot.pdf"), bbox_inches="tight")
+
+    if fig_reg is not None:
+        fig_reg.savefig(op.join(fig_dir, "qc-age-jointplot.pdf"), bbox_inches="tight")
+
+    return {
+        "hist_ax": hist_ax,
+        "dist_ax": dist_ax,
+        "reg_ax": reg_ax,
+    }
 
 
 def plot_qsiprep_stats(fig_dir):
@@ -358,16 +372,158 @@ def plot_qsiprep_stats(fig_dir):
     )
 
 
+def _get_report_df(glob):
+    df_report = dd.read_csv(glob, include_path_column=True).drop(
+        "Unnamed: 0", axis="columns"
+    )
+
+    df_report["seed"] = df_report["path"].apply(
+        lambda s: int(s.split(".csv")[0].split("-")[-1]), meta=("category")
+    )
+
+    df_report = df_report.drop("path", axis="columns").compute()
+    return df_report
+
+
+def visualize_auc_curves(report_set_dir, output_dir, ax=None):
+    df_report = {
+        "with_qc": _get_report_df(op.join(report_set_dir, "with-qc-metrics", "*.csv")),
+        "no_qc": _get_report_df(op.join(report_set_dir, "without-qc-metrics", "*.csv")),
+    }
+
+    colors = plt.get_cmap("tab10").colors
+    labels = ["CNN-i+q", "CNN-i"]
+
+    mean_fpr = np.linspace(0, 1, 100)
+
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=set_size(width=TEXT_WIDTH / 2))
+    else:
+        fig = None
+
+    for df, label, color in zip(
+        df_report.values(),
+        labels,
+        colors,
+    ):
+        tprs = []
+        aucs = []
+
+        for seed in df["seed"].unique():
+            _df = df[df["seed"] == seed]
+            y_true = _df["y_true"]
+            y_prob = _df["y_prob"]
+
+            fpr, tpr, _ = roc_curve(y_true, y_prob)
+            interp_tpr = np.interp(mean_fpr, fpr, tpr)
+            interp_tpr[0] = 0.0
+            tprs.append(interp_tpr)
+            aucs.append(roc_auc_score(y_true, y_prob))
+
+        mean_tpr = np.mean(tprs, axis=0)
+        mean_tpr[-1] = 1.0
+        mean_auc = auc(mean_fpr, mean_tpr)
+        std_auc = np.std(aucs)
+
+        _ = ax.plot(
+            mean_fpr,
+            mean_tpr,
+            color=color,
+            label=r"%s (%0.3f $\pm$ %0.3f)" % (label, mean_auc, std_auc),
+            lw=1.5,
+            alpha=0.8,
+        )
+
+        std_tpr = np.std(tprs, axis=0)
+        tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
+        tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
+        _ = ax.fill_between(
+            mean_fpr,
+            tprs_lower,
+            tprs_upper,
+            color="grey",
+            alpha=0.2,
+            label=r"$\pm$ 1 std. dev." if label == labels[0] else None,
+        )
+
+    _ = ax.plot(
+        [0, 1],
+        [0, 1],
+        linestyle="--",
+        lw=1.5,
+        color=colors[3],
+        label="Chance",
+        alpha=0.8,
+    )
+
+    _ = ax.set(xlim=[-0.05, 1.05], ylim=[-0.05, 1.05])
+    _ = ax.legend(
+        loc="lower right",
+        bbox_to_anchor=(1.01, -0.025),
+        framealpha=1.0,
+        title="Model (AUC)",
+        labelspacing=0.25,
+        handlelength=1.25,
+        handletextpad=0.5,
+    )
+    _ = ax.set_xlabel("False Positive Rate")
+    _ = ax.set_ylabel("True Positive Rate")
+    # _ = ax.set_title("Mean ROC")
+    ax.text(
+        s="a",
+        transform=ax.transAxes,
+        **TEXT_KWARGS,
+    )
+
+    if fig is not None:
+        fig.savefig(op.join(output_dir, "dl_roc_auc_curve.pdf"), bbox_inches="tight")
+
+    return ax
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "fig_dir",
         help="Figure directory.",
     )
+    parser.add_argument(
+        "report_set_dir",
+        help="Directory containing the saved tensorflow report set predictions",
+    )
 
     args = parser.parse_args()
 
     with plt.style.context("/tex.mplstyle"):
-        plot_qc_bundle_profiles(fig_dir=args.fig_dir)
-        plot_qc_stats(fig_dir=args.fig_dir)
-        plot_qsiprep_stats(fig_dir=args.fig_dir)
+        figsize = set_size(width=FULL_WIDTH, subplots=(2, 2))
+        fig = plt.figure(figsize=figsize)
+        gs0 = gridspec.GridSpec(2, 2, figure=fig)
+
+        gs00 = gs0[0, 0].subgridspec(1, 1)
+        auc_ax = fig.add_subplot(gs00[0])
+
+        gs10 = gs0[1, 0].subgridspec(1, 1)
+        ax1 = fig.add_subplot(gs10[0])
+
+        gs11 = gs0[1, 1].subgridspec(1, 1)
+        ax2 = fig.add_subplot(gs11[0], sharey=ax1)
+
+        hist_ax = np.array([ax1, ax2])
+
+        grid_kws = {"height_ratios": (0.18, 0.82), "hspace": 0}
+        gs01 = gs0[0, 1].subgridspec(2, 1, **grid_kws)
+        dist_ax = fig.add_subplot(gs01[0])
+        reg_ax = fig.add_subplot(gs01[1], sharex=dist_ax)
+
+        # plot_qc_bundle_profiles(fig_dir=args.fig_dir)
+        plot_qc_stats(
+            fig_dir=args.fig_dir, hist_ax=hist_ax, dist_ax=dist_ax, reg_ax=reg_ax
+        )
+        # plot_qsiprep_stats(fig_dir=args.fig_dir)
+        visualize_auc_curves(
+            report_set_dir=args.report_set_dir,
+            output_dir=args.fig_dir,
+            ax=auc_ax,
+        )
+
+        fig.savefig(op.join(args.fig_dir, "deep_learning_qc.pdf"), bbox_inches="tight")

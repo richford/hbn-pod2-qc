@@ -90,108 +90,6 @@ def save_hbn_pod2_sankey(out_dir):
     fig.write_html(op.join(out_dir, "hbn-pod2-sankey.html"))
 
 
-def _get_report_df(glob):
-    df_report = dd.read_csv(glob, include_path_column=True).drop(
-        "Unnamed: 0", axis="columns"
-    )
-
-    df_report["seed"] = df_report["path"].apply(
-        lambda s: int(s.split(".csv")[0].split("-")[-1]), meta=("category")
-    )
-
-    df_report = df_report.drop("path", axis="columns").compute()
-    return df_report
-
-
-def visualize_auc_curves(report_set_dir, output_dir):
-    df_report = {
-        "with_qc": _get_report_df(op.join(report_set_dir, "with-qc-metrics", "*.csv")),
-        "no_qc": _get_report_df(op.join(report_set_dir, "without-qc-metrics", "*.csv")),
-    }
-
-    colors = plt.get_cmap("tab10").colors
-    labels = ["CNN-i+q", "CNN-i"]
-
-    mean_fpr = np.linspace(0, 1, 100)
-    fig, ax = plt.subplots(1, 1, figsize=set_size(width=TEXT_WIDTH / 2))
-
-    for df, label, color in zip(
-        df_report.values(),
-        labels,
-        colors,
-    ):
-        tprs = []
-        aucs = []
-
-        for seed in df["seed"].unique():
-            _df = df[df["seed"] == seed]
-            y_true = _df["y_true"]
-            y_prob = _df["y_prob"]
-
-            fpr, tpr, _ = roc_curve(y_true, y_prob)
-            interp_tpr = np.interp(mean_fpr, fpr, tpr)
-            interp_tpr[0] = 0.0
-            tprs.append(interp_tpr)
-            aucs.append(roc_auc_score(y_true, y_prob))
-
-        mean_tpr = np.mean(tprs, axis=0)
-        mean_tpr[-1] = 1.0
-        mean_auc = auc(mean_fpr, mean_tpr)
-        std_auc = np.std(aucs)
-
-        _ = ax.plot(
-            mean_fpr,
-            mean_tpr,
-            color=color,
-            label=r"%s (%0.3f $\pm$ %0.3f)" % (label, mean_auc, std_auc),
-            lw=1.5,
-            alpha=0.8,
-        )
-
-        std_tpr = np.std(tprs, axis=0)
-        tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
-        tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
-        _ = ax.fill_between(
-            mean_fpr,
-            tprs_lower,
-            tprs_upper,
-            color="grey",
-            alpha=0.2,
-            label=r"$\pm$ 1 std. dev." if label == labels[0] else None,
-        )
-
-    _ = ax.plot(
-        [0, 1],
-        [0, 1],
-        linestyle="--",
-        lw=1.5,
-        color=colors[3],
-        label="Chance",
-        alpha=0.8,
-    )
-
-    _ = ax.set(xlim=[-0.05, 1.05], ylim=[-0.05, 1.05])
-    _ = ax.legend(
-        loc="lower right",
-        bbox_to_anchor=(1.01, -0.025),
-        framealpha=1.0,
-        title="Model (AUC)",
-        labelspacing=0.25,
-        handlelength=1.25,
-        handletextpad=0.5,
-    )
-    _ = ax.set_xlabel("False Positive Rate")
-    _ = ax.set_ylabel("True Positive Rate")
-    # _ = ax.set_title("Mean ROC")
-    ax.text(
-        s="a",
-        transform=ax.transAxes,
-        **TEXT_KWARGS,
-    )
-
-    fig.savefig(op.join(output_dir, "dl_roc_auc_curve.pdf"), bbox_inches="tight")
-
-
 def _melt_splits(df_input, metric):
     df = df_input.melt(
         id_vars=["epoch", "seed"],
@@ -226,16 +124,20 @@ def visualize_loss_curves(log_dir, output_dir):
             ["path", "loss", "val_loss"], axis="columns", inplace=True
         )
 
-    for (qc_key, training_df), letter, title in zip(
-        df_training.items(), "ab", ["CNN-i+q", "CNN-i"]
+    width, height = set_size(width=FULL_WIDTH, subplots=(3, 2))
+    fig, learning_curve_axes = plt.subplots(
+        3,
+        2,
+        figsize=(width, height * 0.8),
+        sharex=True,
+        gridspec_kw=dict(wspace=0.20, hspace=0.05),
+    )
+
+    for (qc_key, training_df), letter, title, axes in zip(
+        df_training.items(), "ab", ["CNN-i+q", "CNN-i"], learning_curve_axes.T
     ):
-        width, height = set_size(width=0.45 * TEXT_WIDTH, subplots=(3, 1))
-        fig, axes = plt.subplots(3, 1, figsize=(width, height * 0.8), sharex=True)
-
-        fig.tight_layout(h_pad=0)
-
         these_kwargs = TEXT_KWARGS.copy()
-        these_kwargs.update(dict(x=-0.2, y=1.1))
+        these_kwargs.update(dict(x=-0.05, y=1.075))
         axes[0].text(
             s=letter,
             transform=axes[0].transAxes,
@@ -278,9 +180,7 @@ def visualize_loss_curves(log_dir, output_dir):
         axes[0].get_legend().remove()
         axes[2].get_legend().remove()
 
-        fig.savefig(
-            op.join(output_dir, f"dl_learning_curve_{qc_key}.pdf"), bbox_inches="tight"
-        )
+    fig.savefig(op.join(output_dir, "dl_learning_curves.pdf"), bbox_inches="tight")
 
 
 def visualize_model_architecture(saved_model_dir, output_dir):
@@ -631,15 +531,10 @@ if __name__ == "__main__":
             output_dir=dl_fig_dir,
         )
 
-        visualize_auc_curves(
-            report_set_dir=args.report_set_dir,
-            output_dir=dl_fig_dir,
-        )
-
     # save_hbn_pod2_sankey(args.fig_dir)
 
-    with plt.style.context("/tex.mplstyle"):
-        save_attribution_maps(
-            nifti_dir=args.nifti_dir,
-            out_dir=dl_fig_dir,
-        )
+    # with plt.style.context("/tex.mplstyle"):
+    # save_attribution_maps(
+    #     nifti_dir=args.nifti_dir,
+    #     out_dir=dl_fig_dir,
+    # )

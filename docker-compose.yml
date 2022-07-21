@@ -125,6 +125,7 @@ services:
     platform: linux/amd64
     volumes:
       - ./figures/bundle-profiles:/figures
+      - ./data/osfstorage/deep-learning-qc/report-set-predictions:/input/report-set-predictions
       - $HOME/.aws:/root/.aws
   inference:
     build:

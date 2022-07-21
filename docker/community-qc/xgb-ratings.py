@@ -3,6 +3,7 @@
 import argparse
 import dask.dataframe as dd
 import json
+import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -203,6 +204,7 @@ def xgb_qc(
     fig_dir,
     random_state=42,
     image_type=None,
+    roc_ax=None,
 ):
     # Create the xgb model directory if it doesn't already exist
     os.makedirs(op.abspath(xgb_model_dir), exist_ok=True)
@@ -270,7 +272,11 @@ def xgb_qc(
 
     # While training, plot the roc curve for each split
     # Thanks sklearn examples, you rock!
-    fig, ax = plt.subplots(1, 1, figsize=set_size(width=0.37 * FULL_WIDTH))
+    if roc_ax is not None:
+        fig = None
+    else:
+        fig, roc_ax = plt.subplots(1, 1, figsize=set_size(width=0.37 * FULL_WIDTH))
+
     for i, (train, test) in enumerate(tqdm(cv.split(X, y), total=6)):
         try:
             xgb = XGBClassifier()
@@ -387,7 +393,7 @@ def xgb_qc(
         mean_tpr[-1] = 1.0
         mean_auc = auc(mean_fpr, mean_tpr)
         std_auc = np.std(_aucs)
-        ax.plot(
+        roc_ax.plot(
             mean_fpr,
             mean_tpr,
             color=color,
@@ -399,7 +405,7 @@ def xgb_qc(
         std_tpr = np.std(_tprs, axis=0)
         tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
         tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
-        ax.fill_between(
+        roc_ax.fill_between(
             mean_fpr,
             tprs_lower,
             tprs_upper,
@@ -408,7 +414,7 @@ def xgb_qc(
             label=r"$\pm$ 1 std. dev." if label == "Fibr + dwiqc" else None,
         )
 
-    ax.plot(
+    roc_ax.plot(
         [0, 1],
         [0, 1],
         linestyle="--",
@@ -418,24 +424,24 @@ def xgb_qc(
         alpha=0.8,
     )
 
-    ax.set(xlim=[-0.05, 1.05], ylim=[-0.05, 1.05])
-    ax.legend(
+    roc_ax.set(xlim=[-0.05, 1.05], ylim=[-0.05, 1.05])
+    roc_ax.legend(
         loc="lower right",
-        bbox_to_anchor=(1.01, -0.025),
+        bbox_to_anchor=(1.10, -0.025),
         framealpha=1.0,
         title="Model (AUC)",
         labelspacing=0.25,
         handlelength=1.25,
         handletextpad=0.5,
     )
-    ax.set_xlabel("False Positive Rate")
-    ax.set_ylabel("True Positive Rate")
+    roc_ax.set_xlabel("False Positive Rate")
+    roc_ax.set_ylabel("True Positive Rate")
 
     these_kwargs = TEXT_KWARGS.copy()
-    these_kwargs.update(dict(x=-0.175))
-    ax.text(
+    these_kwargs.update(dict(x=0.025))
+    roc_ax.text(
         s="c",
-        transform=ax.transAxes,
+        transform=roc_ax.transAxes,
         **these_kwargs,
     )
 
@@ -449,7 +455,8 @@ def xgb_qc(
         shap_q_csv_title += "_" + image_type
         qc_csv_title += "_" + image_type
 
-    fig.savefig(op.join(fig_dir, f"{plot_title}.pdf"), bbox_inches="tight")
+    if fig is not None:
+        fig.savefig(op.join(fig_dir, f"{plot_title}.pdf"), bbox_inches="tight")
 
     absmean_shap = pd.Series(
         index=X_columns,
@@ -549,9 +556,13 @@ def xgb_qc(
     # print(qc_weights)
 
     # _save_participants_tsv(qc_ratings, output_dir, image_type=image_type)
+    return roc_ax
 
 
-def compute_irr_with_xgb_rater(expert_qc_dir, fibr_deriv_dir, fig_dir):
+def compute_irr_with_xgb_rater(
+    expert_qc_dir, fibr_deriv_dir, fig_dir, irr_ax=None, cbar_ax=None
+):
+    print("Creating IRR plots")
     qc_files = glob(op.join(expert_qc_dir, "rater-*_qc.csv"))
 
     expert_qc = dd.read_csv(
@@ -613,11 +624,14 @@ def compute_irr_with_xgb_rater(expert_qc_dir, fibr_deriv_dir, fig_dir):
     df_kappa["mean"] = df_kappa.mean(axis="columns")
 
     # plot the heatmap for correlation matrix
-    grid_kws = {"width_ratios": (0.9, 0.075), "wspace": 0.15}
-    width, height = set_size(width=0.4 * FULL_WIDTH)
-    fig, (ax, cbar_ax) = plt.subplots(
-        1, 2, gridspec_kw=grid_kws, figsize=(width, height * 1.5)
-    )
+    if irr_ax is not None:
+        fig = None
+    else:
+        grid_kws = {"width_ratios": (0.9, 0.075), "wspace": 0.15}
+        width, height = set_size(width=0.4 * FULL_WIDTH)
+        fig, (irr_ax, cbar_ax) = plt.subplots(
+            1, 2, gridspec_kw=grid_kws, figsize=(width, height * 1.5)
+        )
 
     vmin = df_kappa.to_numpy().min()
     vmax = df_kappa.to_numpy().max()
@@ -632,11 +646,11 @@ def compute_irr_with_xgb_rater(expert_qc_dir, fibr_deriv_dir, fig_dir):
     }
     df_kappa = df_kappa.rename(columns=mapper).rename(index=mapper)
 
-    ax = sns.heatmap(
+    irr_ax = sns.heatmap(
         df_kappa,
         # vmin=vmin, vmax=vmax, center=0.5,
         cmap=sns.color_palette("Blues", as_cmap=True),
-        ax=ax,
+        ax=irr_ax,
         cbar_ax=cbar_ax,
         # square=False,
         annot=True,
@@ -644,25 +658,42 @@ def compute_irr_with_xgb_rater(expert_qc_dir, fibr_deriv_dir, fig_dir):
         mask=np.tril(np.ones_like(df_kappa.to_numpy())),
     )
 
-    _ = ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
-    _ = ax.set_xticklabels(ax.get_xticklabels())
-    _ = ax.set_ylabel("rater", labelpad=-1)
-    _ = ax.set_xlabel("rater")
+    _ = irr_ax.set_yticklabels(irr_ax.get_yticklabels(), rotation=0)
+    _ = irr_ax.set_xticklabels(irr_ax.get_xticklabels())
+    _ = irr_ax.set_ylabel("rater", labelpad=-1)
+    _ = irr_ax.set_xlabel("rater")
     these_kwargs = TEXT_KWARGS.copy()
     these_kwargs.update(dict(x=-0.05, y=1.05))
-    _ = ax.text(
+    _ = irr_ax.text(
         s="e",
-        transform=ax.transAxes,
+        transform=irr_ax.transAxes,
         **these_kwargs,
     )
-    ax.set_title(r"Pairwise Cohen's $\kappa$")
-    fig.savefig(op.join(fig_dir, "expert-raters-cohens-kappa.pdf"), bbox_inches="tight")
+    irr_ax.set_title(r"Pairwise Cohen's $\kappa$")
+
+    if fig is not None:
+        fig.savefig(
+            op.join(fig_dir, "expert-raters-cohens-kappa.pdf"), bbox_inches="tight"
+        )
 
     df_kappa.loc["mean"] = df_kappa["mean"].to_list() + [df_kappa.mean().mean()]
     df_kappa.to_csv(op.join(fibr_deriv_dir, "cohens_kappa.csv"))
 
+    return {
+        "irr_ax": irr_ax,
+        "cbar_ax": cbar_ax,
+    }
 
-def plot_xgb_scatter(expert_rating_file, output_dir, fibr_dir, fig_dir):
+
+def plot_xgb_scatter(
+    expert_rating_file,
+    output_dir,
+    fibr_dir,
+    fig_dir,
+    fibr_scatter_axes=None,
+    qsiprep_pairplot_axes=None,
+):
+    print("Creating QC scatterplots")
     X, _, df_qc, fibr_votes = _get_Xy(
         expert_rating_file=expert_rating_file, fibr_dir=fibr_dir
     )
@@ -693,28 +724,31 @@ def plot_xgb_scatter(expert_rating_file, output_dir, fibr_dir, fig_dir):
 
     del df_xgb_qc
 
-    fig, axes = plt.subplots(
-        1,
-        2,
-        figsize=set_size(width=0.63 * FULL_WIDTH, subplots=(1, 2)),
-        sharey=True,
-    )
-    fig.tight_layout(pad=0)
+    if fibr_scatter_axes is not None:
+        fig = None
+    else:
+        fig, fibr_scatter_axes = plt.subplots(
+            1,
+            2,
+            figsize=set_size(width=0.63 * FULL_WIDTH, subplots=(1, 2)),
+            sharey=True,
+        )
+        fig.tight_layout(pad=0)
 
-    for x_var, ax in zip(["fibr rating", "fibr + qsiprep rating"], axes):
+    for x_var, ax in zip(["fibr rating", "fibr + qsiprep rating"], fibr_scatter_axes):
         _ = sns.scatterplot(data=merged, x=x_var, y="rating", s=18, ax=ax)
 
-    axes[0].set_ylabel("Expert rating", labelpad=-0.25)
-    axes[0].set_xlabel("Mean Fibr rating")
-    axes[1].set_xlabel("XGB rating")
+    fibr_scatter_axes[0].set_ylabel("Expert rating", labelpad=-0.25)
+    fibr_scatter_axes[0].set_xlabel("Mean Fibr rating")
+    fibr_scatter_axes[1].set_xlabel("XGB rating")
 
-    for letter, ax in zip("ab", axes.flatten()):
+    for letter, ax in zip("ab", fibr_scatter_axes.flatten()):
         ax.tick_params(axis="both", which="major")
         these_kwargs = TEXT_KWARGS.copy()
         if letter == "b":
-            these_kwargs.update(dict(x=0))
+            these_kwargs.update(dict(x=0.0))
         else:
-            these_kwargs.update(dict(x=-0.1))
+            these_kwargs.update(dict(x=-0.05))
         ax.text(
             s=letter,
             transform=ax.transAxes,
@@ -722,8 +756,13 @@ def plot_xgb_scatter(expert_rating_file, output_dir, fibr_dir, fig_dir):
         )
 
     del merged
-    fig.savefig(op.join(fig_dir, "fibr-rating-scatter-plot.pdf"), bbox_inches="tight")
-    del fig, axes
+
+    if fig is not None:
+        fig.savefig(
+            op.join(fig_dir, "fibr-rating-scatter-plot.pdf"), bbox_inches="tight"
+        )
+        del fig, fibr_scatter_axes
+        fibr_scatter_axes = None
 
     X_all = pd.merge(X, y, left_index=True, right_index=True)
 
@@ -739,25 +778,28 @@ def plot_xgb_scatter(expert_rating_file, output_dir, fibr_dir, fig_dir):
         inplace=True,
     )
 
-    fig1, axes1 = plt.subplots(
-        2, 2, figsize=set_size(width=0.6 * FULL_WIDTH, subplots=(2, 2))
-    )
-    fig1.tight_layout()
+    if qsiprep_pairplot_axes is not None:
+        fig1 = None
+    else:
+        fig1, qsiprep_pairplot_axes = plt.subplots(
+            2, 2, figsize=set_size(width=0.6 * FULL_WIDTH, subplots=(2, 2))
+        )
+        fig1.tight_layout()
 
     for x_var, ax in zip(
         ["Neighboring DWI correlation", "Num outlier slices", "Max rel. translation"],
-        axes1.flatten()[1:],
+        qsiprep_pairplot_axes.flatten()[1:],
     ):
         _ = sns.scatterplot(data=X_all, x=x_var, y="Expert rating", s=14, ax=ax)
         r, _ = pearsonr(X_all[x_var], X_all["Expert rating"])
         print(f"Pearson_R({x_var}, Expert rating) = {r:.3f}")
 
-    _ = sns.histplot(data=X_all, x="Expert rating", ax=axes1[0, 0])
+    _ = sns.histplot(data=X_all, x="Expert rating", ax=qsiprep_pairplot_axes[0, 0])
 
-    # tick_labels = axes1[0, 0].get_yticklabels()
+    # tick_labels = qsiprep_pairplot_axes[0, 0].get_yticklabels()
     these_kwargs = TEXT_KWARGS.copy()
-    these_kwargs.update(dict(y=1.1))
-    for letter, ax in zip("abcd", axes1.flatten()):
+    these_kwargs.update(dict(y=1.15))
+    for letter, ax in zip("abcd", qsiprep_pairplot_axes.flatten()):
         label = ax.get_xlabel()
         ax.set_xlabel(label, labelpad=-0.5)
         label = ax.get_ylabel()
@@ -768,10 +810,16 @@ def plot_xgb_scatter(expert_rating_file, output_dir, fibr_dir, fig_dir):
             **TEXT_KWARGS,
         )
 
-    fig1.savefig(
-        op.join(fig_dir, "expert-qsiprep-pairplot.pdf"),
-        bbox_inches="tight",
-    )
+    if fig1 is not None:
+        fig1.savefig(
+            op.join(fig_dir, "expert-qsiprep-pairplot.pdf"),
+            bbox_inches="tight",
+        )
+
+    return {
+        "qsiprep_pairplot": qsiprep_pairplot_axes,
+        "fibr_scatterplot": fibr_scatter_axes,
+    }
 
 
 if __name__ == "__main__":
@@ -822,7 +870,41 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     with plt.style.context("/tex.mplstyle"):
-        xgb_qc(
+        figsize = set_size(width=FULL_WIDTH, subplots=(2, 3))
+
+        expert_qc_fig = plt.figure(figsize=figsize)
+        gs0 = gridspec.GridSpec(
+            1, 2, figure=expert_qc_fig, width_ratios=[0.6, 0.4], wspace=0.075
+        )
+        gs00 = gridspec.GridSpecFromSubplotSpec(2, 2, subplot_spec=gs0[0])
+        ax0 = expert_qc_fig.add_subplot(gs00[0, 0])
+        ax1 = expert_qc_fig.add_subplot(gs00[0, 1])
+        ax2 = expert_qc_fig.add_subplot(gs00[1, 0])
+        ax3 = expert_qc_fig.add_subplot(gs00[1, 1])
+        qsiprep_pairplot_axes = np.array([ax0, ax1, ax2, ax3]).reshape(2, 2)
+
+        grid_kws = {"width_ratios": (0.9, 0.075)}
+        gs01 = gs0[1].subgridspec(1, 2, **grid_kws)
+        irr_ax = expert_qc_fig.add_subplot(gs01[0])
+        cbar_ax = expert_qc_fig.add_subplot(gs01[1])
+
+        figsize = set_size(width=FULL_WIDTH, subplots=(1, 3))
+        community_qc_fig = plt.figure(figsize=figsize)
+
+        gs1 = gridspec.GridSpec(
+            1, 2, figure=community_qc_fig, width_ratios=[0.63, 0.37], wspace=0.175
+        )
+        gs10 = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=gs1[0], wspace=0.075)
+
+        scatter_ax0 = community_qc_fig.add_subplot(gs10[0])
+        scatter_ax1 = community_qc_fig.add_subplot(gs10[1], sharey=scatter_ax0)
+        fibr_scatter_axes = np.array([scatter_ax0, scatter_ax1])
+
+        # the following syntax does the same as the GridSpecFromSubplotSpec call above:
+        gs11 = gs1[1].subgridspec(1, 1)
+        roc_ax = community_qc_fig.add_subplot(gs11[0])
+
+        roc_ax = xgb_qc(
             expert_rating_file=args.expert_rating_file,
             fibr_dir=args.fibr_dir,
             xgb_model_dir=args.xgb_model_dir,
@@ -830,17 +912,35 @@ if __name__ == "__main__":
             fig_dir=args.fig_dir,
             random_state=args.random_state,
             image_type=args.image_type,
+            roc_ax=roc_ax,
         )
 
-        compute_irr_with_xgb_rater(
+        axes = compute_irr_with_xgb_rater(
             expert_qc_dir=args.raw_expert_dir,
             fibr_deriv_dir=args.output_dir,
             fig_dir=args.fig_dir,
+            irr_ax=irr_ax,
+            cbar_ax=cbar_ax,
         )
 
-        plot_xgb_scatter(
+        scatter_axes = plot_xgb_scatter(
             expert_rating_file=args.expert_rating_file,
             output_dir=args.output_dir,
             fibr_dir=args.fibr_dir,
             fig_dir=args.fig_dir,
+            fibr_scatter_axes=fibr_scatter_axes,
+            qsiprep_pairplot_axes=qsiprep_pairplot_axes,
+        )
+
+        scatter_ax1.set_yticklabels([])
+        scatter_ax1.set_ylabel("")
+
+        expert_qc_fig.savefig(
+            op.join(args.fig_dir, "expert_qc.pdf"),
+            bbox_inches="tight",
+        )
+
+        community_qc_fig.savefig(
+            op.join(args.fig_dir, "community_qc.pdf"),
+            bbox_inches="tight",
         )
